@@ -1,0 +1,53 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Company {
+  id        String   @id @db.VarChar(255) // This is the companyId from Whop
+  name      String   @db.VarChar(500)
+  config    Json?    // Store bot settings and other config here
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([createdAt])
+  @@map("companies")
+}
+
+model SystemMetric {
+  id          String   @id @default(cuid()) @db.VarChar(255)
+  metricName  String   @db.VarChar(100)
+  metricValue Float
+  tags        Json?    // For additional metadata
+  timestamp   DateTime @default(now()) @db.Timestamptz
+
+  @@index([metricName, timestamp])
+  @@index([timestamp])
+  @@map("system_metrics")
+}
+
+model ErrorLog {
+  id        String   @id @default(cuid()) @db.VarChar(255)
+  level     String   @db.VarChar(20) // ERROR, WARN, INFO, DEBUG
+  message   String   @db.Text
+  stack     String?  @db.Text
+  context   Json?    // Additional context data
+  companyId String?  @db.VarChar(255)
+  timestamp DateTime @default(now()) @db.Timestamptz
+
+  @@index([level, timestamp])
+  @@index([companyId, timestamp])
+  @@index([timestamp])
+  @@map("error_logs")
+}
