@@ -19,7 +19,7 @@ RESPONSE GUIDELINES:
 Remember: Preset Q&A answers are pre-approved and should be used exactly as written when they match the user's question.`;
 
 export const buildPrompt = (question: string, knowledgeBase: string, presetQA: Array<{id: string, question: string, answer: string, enabled: boolean}> = []): string => {
-  // Filter enabled preset Q&A
+  // Filter enabled preset Q&A.
   const enabledQA = presetQA.filter(qa => qa.enabled);
   
   let presetQASection = '';
