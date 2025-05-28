@@ -1,15 +1,15 @@
 {
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
-  "installCommand": "npm install",
+  "installCommand": "npm install --force",
   "framework": "nextjs",
   "env": {
-    "DATABASE_URL": "@database_url",
-    "DIRECT_URL": "@direct_url",
-    "OPENROUTER_API_KEY": "@openrouter_api_key",
-    "OPENROUTER_MODEL": "@openrouter_model",
-    "WHOP_API_KEY": "@whop_api_key",
-    "WHOP_AGENT_USER_ID": "@whop_agent_user_id",
+    "DATABASE_URL": "DATABASE_URL",
+    "DIRECT_URL": "DIRECT_URL",
+    "OPENROUTER_API_KEY": "OPENROUTER_API_KEY",
+    "OPENROUTER_MODEL": "OPENROUTER_MODEL",
+    "WHOP_APP_API_KEY": "WHOP_APP_API_KEY",
+    "WHOP_AGENT_USER_ID": "WHOP_AGENT_USER_ID",
     "NODE_ENV": "production"
   },
   "regions": ["iad1"],
