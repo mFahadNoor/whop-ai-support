@@ -8,6 +8,10 @@ import { logger } from './logger';
 class BotCoordinator {
   private pendingMessages = new Map<string, ProcessedMessage[]>();
   private processingMessages = new Set<string>();
+  private readonly MAX_PENDING_RETRIES = 5;
+  private readonly INITIAL_RETRY_DELAY = 500; // Start with 500ms
+  private readonly MAX_RETRY_DELAY = 5000; // Max 5 seconds
+  private retryCount = new Map<string, number>();
 
   constructor() {
     // Set up callback to process pending messages when mappings arrive
@@ -68,44 +72,89 @@ class BotCoordinator {
    * Internal message processing logic
    */
   private async processMessageInternal(message: ProcessedMessage): Promise<void> {
-
     // Get company ID for this experience
     let companyId = companyManager.getCompanyId(message.experienceId);
     const messageKey = `${message.entityId}:${message.feedId}`;
     
     if (!companyId) {
-      // If no mapping yet, store the message and wait a bit
-      console.log(`⏳ No company mapping for experience ${message.experienceId} yet, buffering message...`);
+      // Try to fetch from database as fallback
+      companyId = await companyManager.tryFetchMappingFromDB(message.experienceId);
+    }
+    
+    if (!companyId) {
+      // If still no mapping, buffer the message with retry logic
+      const retryKey = message.experienceId;
+      const currentRetries = this.retryCount.get(retryKey) || 0;
+      
+      if (currentRetries >= this.MAX_PENDING_RETRIES) {
+        logger.error('Max retries exceeded for experience mapping, dropping message', undefined, {
+          experienceId: message.experienceId,
+          retries: currentRetries,
+          action: 'max_retries_exceeded',
+        });
+        this.retryCount.delete(retryKey);
+        this.processingMessages.delete(messageKey);
+        return;
+      }
+
+      console.log(`⏳ No company mapping for experience ${message.experienceId} yet, buffering message (retry ${currentRetries + 1}/${this.MAX_PENDING_RETRIES})...`);
       
       if (!this.pendingMessages.has(message.experienceId)) {
         this.pendingMessages.set(message.experienceId, []);
       }
       this.pendingMessages.get(message.experienceId)!.push(message);
       
-      // IMPORTANT: Remove from processing set if we are going to buffer and retry,
-      // to prevent the retry from being incorrectly flagged as a duplicate.
+      // IMPORTANT: Remove from processing set to allow retry
       this.processingMessages.delete(messageKey);
+      
+      // Increment retry count
+      this.retryCount.set(retryKey, currentRetries + 1);
 
-      // Try again after a short delay
+      // Exponential backoff with jitter
+      const delay = Math.min(
+        this.INITIAL_RETRY_DELAY * Math.pow(2, currentRetries),
+        this.MAX_RETRY_DELAY
+      ) + Math.random() * 100; // Add jitter
+      
       setTimeout(async () => {
         await this.processPendingMessages(message.experienceId);
-      }, 2000);
+      }, delay);
       
       return;
     }
 
+    // Reset retry count since we found the mapping
+    this.retryCount.delete(message.experienceId);
+
     console.log(`🎯 Processing message for company ${companyId}`);
 
-    // Get bot settings for this company
-    const settings = await companyManager.getBotSettings(companyId);
+    // Get bot settings for this company - force refresh every few requests to ensure fresh data
+    const shouldForceRefresh = Math.random() < 0.1; // 10% chance to force refresh
+    const settings = await companyManager.getBotSettings(companyId, shouldForceRefresh);
     console.log(`⚙️ Bot settings:`, { enabled: settings.enabled, hasKnowledgeBase: !!settings.knowledgeBase });
 
     const messageLower = message.content.toLowerCase();
     const username = message.user.username || message.user.name || 'Unknown';
 
+    // Handle !refresh command to force cache clear (useful for testing)
+    if (messageLower === "!refresh" || messageLower === "!reload") {
+      companyManager.clearCache(companyId);
+      const refreshedSettings = await companyManager.getBotSettings(companyId, true);
+      const refreshResponse = `🔄 Configuration refreshed! Bot is ${refreshedSettings.enabled ? 'enabled' : 'disabled'}`;
+      console.log(`🔄 Executing !refresh command for ${username} in company ${companyId}`);
+      
+      const success = await whopAPI.sendMessageWithRetry(message.feedId, refreshResponse);
+      if (success) {
+        console.log(`✅ Refresh command completed for ${username}`);
+      } else {
+        console.log(`❌ Failed to send refresh response for ${username}`);
+      }
+      return;
+    }
+
     // Handle !help command (always works, regardless of settings)
     if (messageLower === "!help") {
-      const helpResponse = "Made by Vortex (@script)";
+      const helpResponse = "Made by Vortex (@script)\n\nCommands:\n• !help - Show this help\n• !refresh - Reload bot configuration";
       console.log(`🆘 Executing !help command for ${username}`);
       
       const success = await whopAPI.sendMessageWithRetry(message.feedId, helpResponse);
@@ -186,6 +235,9 @@ class BotCoordinator {
 
     console.log(`🔄 Processing ${pendingMessages.length} buffered messages for experience ${experienceId} (company ${companyId})`);
 
+    // Clear retry count since we found the mapping
+    this.retryCount.delete(experienceId);
+
     // Process all pending messages
     for (const message of pendingMessages) {
       await this.processChatMessage(message);
@@ -204,6 +256,11 @@ class BotCoordinator {
       messageProcessor: messageProcessor.getStats(),
       aiService: aiService.getStats(),
       whopAPI: whopAPI.getStats(),
+      pendingMessages: {
+        experiencesWithPending: this.pendingMessages.size,
+        totalPendingMessages: Array.from(this.pendingMessages.values()).reduce((sum, msgs) => sum + msgs.length, 0),
+        retryingExperiences: this.retryCount.size
+      },
       timestamp: new Date().toISOString()
     };
   }
@@ -217,6 +274,22 @@ class BotCoordinator {
     // Clean up old message data
     messageProcessor.cleanup();
     
+    // Clean up expired cache entries
+    companyManager.cleanupExpiredCache();
+    
+    // Clean up old pending messages that might be stuck
+    const now = Date.now();
+    const staleThreshold = 5 * 60 * 1000; // 5 minutes
+    
+    for (const [experienceId, messages] of this.pendingMessages.entries()) {
+      const oldestMessage = messages[0];
+      if (oldestMessage && now - new Date(oldestMessage.user.id).getTime() > staleThreshold) {
+        console.log(`🗑️ Removing stale pending messages for experience ${experienceId}`);
+        this.pendingMessages.delete(experienceId);
+        this.retryCount.delete(experienceId);
+      }
+    }
+    
     const stats = this.getSystemStats();
     console.log('📊 System stats after maintenance:', stats);
   }
@@ -228,6 +301,11 @@ class BotCoordinator {
     companyManager.clearAllCaches();
     aiService.clearRateLimits();
     whopAPI.clearRateLimits();
+    
+    // Also clear pending messages and retry counts
+    this.pendingMessages.clear();
+    this.retryCount.clear();
+    
     console.log('🗑️ All caches cleared');
   }
 }

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Settings, Zap, Brain, MessageSquare, Plus, Trash2, Edit3, Save, X, HelpCircle, BarChart3 } from 'lucide-react';
+import { Bot, Settings, Zap, Brain, MessageSquare, Plus, Trash2, Edit3, Save, X, HelpCircle, BarChart3, Shield } from 'lucide-react';
 
 interface BotSettings {
   enabled: boolean;
@@ -166,9 +166,10 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
     autoResponse: true,
     responseDelay: 1
   });
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -177,13 +178,23 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
   const loadSettings = async () => {
     try {
       const response = await fetch(`/api/company/${resolvedParams.companyId}/settings`);
+      if (response.status === 403) {
+        setIsAuthorized(false);
+        setLoading(false);
+        return;
+      }
       if (response.ok) {
         const data = await response.json();
         setSettings(data.settings || settings);
+        setIsAuthorized(true);
+      } else {
+        setMessage('Failed to load settings');
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
+      setMessage('Error loading settings');
     }
+    setLoading(false);
   };
 
   const saveSettings = async () => {
@@ -196,11 +207,15 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
         body: JSON.stringify({ settings })
       });
 
-      if (response.ok) {
+      if (response.status === 403) {
+        setMessage('Unauthorized: Admin access required');
+        setIsAuthorized(false);
+      } else if (response.ok) {
         setMessage('Settings saved successfully!');
         setTimeout(() => setMessage(''), 3000);
       } else {
-        setMessage('Failed to save settings');
+        const data = await response.json();
+        setMessage(data.error || 'Failed to save settings');
       }
     } catch (error) {
       setMessage('Error saving settings');
@@ -244,6 +259,48 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
     { value: 'technical', label: 'Technical', desc: 'Detailed and precise explanations' },
     { value: 'custom', label: 'Custom', desc: 'Use your own personality settings' }
   ];
+
+  // Show loading state
+  if (loading && isAuthorized === null) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <p className="text-white">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show unauthorized message for non-admins
+  if (isAuthorized === false) {
+    return (
+      <div className="min-h-screen bg-black relative overflow-hidden">
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-gradient-to-br from-zinc-900/5 via-black to-zinc-900/5" />
+        </div>
+        <div className="relative z-10 min-h-screen flex items-center justify-center p-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-2xl shadow-xl p-8 text-center max-w-md"
+          >
+            <div className="p-4 rounded-2xl bg-red-500/20 border border-red-500/30 mb-6 inline-block">
+              <Shield className="w-12 h-12 text-red-400" />
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-4">Access Denied</h1>
+            <p className="text-zinc-400 mb-6">
+              You need to be an authorized admin of this company to configure the AI support bot.
+            </p>
+            <p className="text-sm text-zinc-500">
+              Only company owners and admins can access bot settings.
+            </p>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">

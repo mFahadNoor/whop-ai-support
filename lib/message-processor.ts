@@ -1,5 +1,6 @@
 import { ProcessedMessage, WebSocketMessage } from './types';
 import { companyManager } from './company-manager';
+import { logger } from './logger';
 
 const WHOP_AGENT_USER_ID = process.env.WHOP_AGENT_USER_ID;
 
@@ -7,6 +8,8 @@ class MessageProcessor {
   private processedMessages = new Set<string>();
   private recentMessages = new Map<string, Array<{content: string, user: string, timestamp: Date}>>();
   private recentUserMessages = new Map<string, {content: string, timestamp: Date}>();
+  private readonly MAX_PROCESSED_MESSAGES = 2000; // Increased capacity
+  private readonly DUPLICATE_WINDOW_MS = 15000; // Increased to 15 seconds
 
   /**
    * Process incoming WebSocket message
@@ -16,6 +19,13 @@ class MessageProcessor {
     if (messageData.experience?.id && messageData.experience?.bot?.id) {
       const experienceId = messageData.experience.id;
       const companyId = messageData.experience.bot.id;
+      
+      logger.info('Received experience mapping', {
+        experienceId,
+        companyId,
+        action: 'experience_mapping_received'
+      });
+      
       companyManager.registerExperience(experienceId, companyId);
       return null; // Not a chat message
     }
@@ -32,6 +42,10 @@ class MessageProcessor {
     // Check for duplicate messages
     const messageId = post.entityId;
     if (!messageId) {
+      logger.debug('Message missing entityId, skipping', {
+        content: messageContent?.substring(0, 50) || 'N/A',
+        action: 'missing_entity_id'
+      });
       return null;
     }
 
@@ -42,10 +56,10 @@ class MessageProcessor {
 
     // Add to processed set with cleanup
     this.processedMessages.add(messageId);
-    if (this.processedMessages.size > 1000) {
-      const oldestMessage = this.processedMessages.values().next().value;
-      if (oldestMessage) {
-        this.processedMessages.delete(oldestMessage);
+    if (this.processedMessages.size > this.MAX_PROCESSED_MESSAGES) {
+      const oldMessages = Array.from(this.processedMessages).slice(0, this.processedMessages.size - this.MAX_PROCESSED_MESSAGES + 100);
+      for (const oldMessageId of oldMessages) {
+        this.processedMessages.delete(oldMessageId);
       }
     }
 
@@ -55,12 +69,16 @@ class MessageProcessor {
       return null;
     }
 
-    // const messageContent = post.content || post.message; // Already defined above
     if (!messageContent || typeof messageContent !== "string") {
+      logger.debug('Message has no content or invalid content type', {
+        entityId: messageId,
+        contentType: typeof messageContent,
+        action: 'invalid_content'
+      });
       return null;
     }
 
-    // Check for duplicate content from same user within last 10 seconds
+    // Check for duplicate content from same user within the duplicate window
     const userId = post.user?.id;
     if (userId) {
       const userMessageKey = `${userId}:${post.feedId}`;
@@ -69,8 +87,8 @@ class MessageProcessor {
       
       if (recentUserMessage && 
           recentUserMessage.content === messageContent && 
-          (now.getTime() - recentUserMessage.timestamp.getTime()) < 10000) {
-        console.log(`🔄 Skipping duplicate content from user ${post.user?.username || userId} within 10s: "${messageContent.substring(0, 50)}..."`);
+          (now.getTime() - recentUserMessage.timestamp.getTime()) < this.DUPLICATE_WINDOW_MS) {
+        console.log(`🔄 Skipping duplicate content from user ${post.user?.username || userId} within ${this.DUPLICATE_WINDOW_MS/1000}s: "${messageContent.substring(0, 50)}..."`);
         return null;
       }
       
@@ -79,6 +97,16 @@ class MessageProcessor {
         content: messageContent,
         timestamp: now
       });
+      
+      // Clean up old user messages
+      if (this.recentUserMessages.size > 1000) {
+        const cutoff = now.getTime() - this.DUPLICATE_WINDOW_MS;
+        for (const [key, value] of this.recentUserMessages.entries()) {
+          if (value.timestamp.getTime() < cutoff) {
+            this.recentUserMessages.delete(key);
+          }
+        }
+      }
     }
 
     // Store message for feed summaries
@@ -100,10 +128,30 @@ class MessageProcessor {
       feedMessages.splice(0, feedMessages.length - 50);
     }
 
+    // Validate experienceId exists
+    if (!post.experienceId) {
+      logger.warn('Message missing experienceId', {
+        entityId: messageId,
+        feedId: post.feedId,
+        content: messageContent.substring(0, 50),
+        action: 'missing_experience_id'
+      });
+      return null;
+    }
+
     // TODO: Determine if the message is a forum post based on `messageData` structure
     // For example, if (messageData.feedEntity?.forumPost) { messageType = 'forumPost'; }
     // Defaulting to 'chatMessage' for now.
     const messageType: 'forumPost' | 'chatMessage' = 'chatMessage'; 
+
+    logger.debug('Processing chat message', {
+      entityId: messageId,
+      feedId: post.feedId,
+      experienceId: post.experienceId,
+      username: post.user?.username || post.user?.name,
+      contentLength: messageContent.length,
+      action: 'message_processed'
+    });
 
     return {
       entityId: messageId,
@@ -129,7 +177,9 @@ class MessageProcessor {
     return {
       processedMessagesCount: this.processedMessages.size,
       feedsWithMessages: this.recentMessages.size,
-      totalStoredMessages: Array.from(this.recentMessages.values()).reduce((sum, msgs) => sum + msgs.length, 0)
+      totalStoredMessages: Array.from(this.recentMessages.values()).reduce((sum, msgs) => sum + msgs.length, 0),
+      recentUserMessagesCount: this.recentUserMessages.size,
+      duplicateWindowMs: this.DUPLICATE_WINDOW_MS
     };
   }
 
@@ -148,6 +198,18 @@ class MessageProcessor {
         this.recentMessages.set(feedId, filteredMessages);
       }
     }
+    
+    // Clean up old user messages
+    const duplicateWindowAgo = new Date(Date.now() - this.DUPLICATE_WINDOW_MS);
+    for (const [key, value] of this.recentUserMessages.entries()) {
+      if (value.timestamp < duplicateWindowAgo) {
+        this.recentUserMessages.delete(key);
+      }
+    }
+    
+    logger.debug('Message processor cleanup completed', {
+      action: 'cleanup_completed'
+    });
   }
 }
 

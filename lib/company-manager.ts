@@ -1,11 +1,13 @@
 import { ExperienceData, BotSettings } from './types';
 import { prisma } from './prisma';
+import { logger } from './logger';
 
 class CompanyManager {
   private experienceToCompanyMap = new Map<string, string>();
   private companySettingsCache = new Map<string, BotSettings>();
   private cacheExpiry = new Map<string, number>();
-  private readonly CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  private readonly CACHE_TTL = 30 * 1000; // Reduced to 30 seconds for faster updates
+  private readonly MAPPING_RETRY_DELAY = 500; // Faster retry for mappings
 
   /**
    * Register an experience-to-company mapping
@@ -13,6 +15,9 @@ class CompanyManager {
   registerExperience(experienceId: string, companyId: string): void {
     console.log(`🔗 Mapping experience ${experienceId} to company ${companyId}`);
     this.experienceToCompanyMap.set(experienceId, companyId);
+    
+    // Clear cache for this company when new mapping arrives to ensure fresh data
+    this.clearCache(companyId);
     
     // Notify that this experience now has a company mapping
     this.notifyExperienceMapped?.(experienceId);
@@ -28,7 +33,7 @@ class CompanyManager {
   private notifyExperienceMapped?: (experienceId: string) => void;
 
   /**
-   * Get company ID from experience ID
+   * Get company ID from experience ID with better retry logic
    */
   getCompanyId(experienceId: string): string | null {
     const companyId = this.experienceToCompanyMap.get(experienceId);
@@ -41,20 +46,40 @@ class CompanyManager {
   }
 
   /**
-   * Get bot settings for a company with caching
+   * Try to fetch company mapping from database if not in memory
    */
-  async getBotSettings(companyId: string): Promise<BotSettings> {
-    // Check cache first
-    const cached = this.companySettingsCache.get(companyId);
-    const expiry = this.cacheExpiry.get(companyId);
-    
-    if (cached && expiry && Date.now() < expiry) {
-      console.log(`📋 Using cached settings for company ${companyId}`);
-      return cached;
+  async tryFetchMappingFromDB(experienceId: string): Promise<string | null> {
+    try {
+      // This is a fallback - in a real scenario you might have a table that maps experiences to companies
+      // For now, we'll just return null and rely on the WebSocket mapping messages
+      logger.debug('Attempted to fetch mapping from DB but no fallback mechanism implemented', {
+        experienceId,
+        action: 'mapping_db_fallback'
+      });
+      return null;
+    } catch (error) {
+      logger.error('Error trying to fetch mapping from database', error, { experienceId });
+      return null;
+    }
+  }
+
+  /**
+   * Get bot settings for a company with caching and force refresh option
+   */
+  async getBotSettings(companyId: string, forceRefresh: boolean = false): Promise<BotSettings> {
+    // Check cache first (unless force refresh is requested)
+    if (!forceRefresh) {
+      const cached = this.companySettingsCache.get(companyId);
+      const expiry = this.cacheExpiry.get(companyId);
+      
+      if (cached && expiry && Date.now() < expiry) {
+        console.log(`📋 Using cached settings for company ${companyId}`);
+        return cached;
+      }
     }
 
     // Fetch from database
-    console.log(`🔍 Loading settings from database for company ${companyId}`);
+    console.log(`🔍 Loading settings from database for company ${companyId}${forceRefresh ? ' (force refresh)' : ''}`);
     try {
       const company = await prisma.company.findUnique({
         where: { id: companyId }
@@ -81,16 +106,33 @@ class CompanyManager {
         ...(dbSettings || {}),
       };
 
-      // Cache the result
+      // Cache the result with shorter TTL
       this.companySettingsCache.set(companyId, settings);
       this.cacheExpiry.set(companyId, Date.now() + this.CACHE_TTL);
 
-      console.log(`💾 Cached settings for company ${companyId}:`, settings);
+      console.log(`💾 Cached settings for company ${companyId}:`, {
+        enabled: settings.enabled,
+        hasKnowledgeBase: !!settings.knowledgeBase,
+        responseStyle: settings.responseStyle,
+        presetQACount: settings.presetQA?.length || 0
+      });
+      
+      logger.info('Company settings loaded', {
+        companyId,
+        enabled: settings.enabled,
+        hasKnowledgeBase: !!settings.knowledgeBase,
+        action: 'settings_loaded'
+      });
+      
       return settings;
     } catch (error) {
-      console.error(`❌ Error fetching settings for company ${companyId}:`, error);
+      logger.error(`Error fetching settings for company ${companyId}`, error, {
+        companyId,
+        action: 'settings_fetch_error'
+      });
+      
       // Fallback to complete default settings on error
-      return {
+      const fallbackSettings: BotSettings = {
         enabled: false,
         knowledgeBase: '',
         botPersonality: 'helpful assistant',
@@ -103,6 +145,8 @@ class CompanyManager {
         presetQuestions: [],
         presetAnswers: []
       };
+      
+      return fallbackSettings;
     }
   }
 
@@ -112,6 +156,7 @@ class CompanyManager {
   clearCache(companyId: string): void {
     this.companySettingsCache.delete(companyId);
     this.cacheExpiry.delete(companyId);
+    logger.info('Cache cleared for company', { companyId, action: 'cache_cleared' });
     console.log(`🗑️ Cleared cache for company ${companyId}`);
   }
 
@@ -121,7 +166,16 @@ class CompanyManager {
   clearAllCaches(): void {
     this.companySettingsCache.clear();
     this.cacheExpiry.clear();
+    logger.info('All caches cleared', { action: 'all_caches_cleared' });
     console.log(`🗑️ Cleared all caches`);
+  }
+
+  /**
+   * Force refresh settings for a company
+   */
+  async refreshSettings(companyId: string): Promise<BotSettings> {
+    console.log(`🔄 Force refreshing settings for company ${companyId}`);
+    return await this.getBotSettings(companyId, true);
   }
 
   /**
@@ -131,8 +185,32 @@ class CompanyManager {
     return {
       experienceMappings: this.experienceToCompanyMap.size,
       cachedSettings: this.companySettingsCache.size,
-      cachedCompanies: Array.from(this.companySettingsCache.keys())
+      cachedCompanies: Array.from(this.companySettingsCache.keys()),
+      cacheTTL: this.CACHE_TTL
     };
+  }
+
+  /**
+   * Clean up expired cache entries
+   */
+  cleanupExpiredCache(): void {
+    const now = Date.now();
+    const expiredCompanies: string[] = [];
+    
+    for (const [companyId, expiry] of this.cacheExpiry.entries()) {
+      if (now >= expiry) {
+        expiredCompanies.push(companyId);
+      }
+    }
+    
+    for (const companyId of expiredCompanies) {
+      this.companySettingsCache.delete(companyId);
+      this.cacheExpiry.delete(companyId);
+    }
+    
+    if (expiredCompanies.length > 0) {
+      console.log(`🧹 Cleaned up ${expiredCompanies.length} expired cache entries`);
+    }
   }
 }
 
