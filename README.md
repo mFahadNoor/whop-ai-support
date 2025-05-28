@@ -124,7 +124,7 @@ npm run test:cache demo
 
 # Or test with a specific company ID
 npm run test:cache biz_your_company_id
-```
+   ```
 
 ## 🔧 Environment Variables
 
@@ -192,8 +192,4 @@ WHOP_AGENT_USER_ID="your_bot_user_id"
 
 ## 📝 License
 
-MIT License - feel free to use for your own communities!
-
----
-
-**Made by Vortex (@script)** - Scaling AI support for hundreds of Whop communities 
+MIT License - feel free to use for your own communities! 

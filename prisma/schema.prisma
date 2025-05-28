@@ -24,30 +24,3 @@ model Company {
   @@index([createdAt])
   @@map("companies")
 }
-
-model SystemMetric {
-  id          String   @id @default(cuid()) @db.VarChar(255)
-  metricName  String   @db.VarChar(100)
-  metricValue Float
-  tags        Json?    // For additional metadata
-  timestamp   DateTime @default(now()) @db.Timestamptz
-
-  @@index([metricName, timestamp])
-  @@index([timestamp])
-  @@map("system_metrics")
-}
-
-model ErrorLog {
-  id        String   @id @default(cuid()) @db.VarChar(255)
-  level     String   @db.VarChar(20) // ERROR, WARN, INFO, DEBUG
-  message   String   @db.Text
-  stack     String?  @db.Text
-  context   Json?    // Additional context data
-  companyId String?  @db.VarChar(255)
-  timestamp DateTime @default(now()) @db.Timestamptz
-
-  @@index([level, timestamp])
-  @@index([companyId, timestamp])
-  @@index([timestamp])
-  @@map("error_logs")
-}

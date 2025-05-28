@@ -323,8 +323,8 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
                 <Bot className="w-12 h-12 text-white" />
               </div>
             </div>
-            <h1 className="text-5xl font-bold text-white mb-4">AI Support</h1>
-            <p className="text-xl text-zinc-400">Made by Vortex (@script)</p>
+            <h1 className="text-5xl font-bold text-white mb-4">Whop AI Bot</h1>
+            <p className="text-xl text-zinc-400">Tutorial Example</p>
           </motion.div>
 
           {/* Status Message */}
@@ -357,8 +357,8 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
                       <Zap className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-bold text-white">AI Support Status</h2>
-                      <p className="text-zinc-400 text-sm">Enable intelligent support responses</p>
+                      <h2 className="text-xl font-bold text-white">Bot Status</h2>
+                      <p className="text-zinc-400 text-sm">Enable or disable the AI bot</p>
                     </div>
                   </div>
                   <ToggleSwitch

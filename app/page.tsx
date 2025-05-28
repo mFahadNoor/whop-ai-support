@@ -37,10 +37,10 @@ export default function HomePage() {
           className="backdrop-blur-xl bg-white/5 border border-white/10 rounded-3xl p-12 shadow-2xl"
         >
           <h1 className="text-6xl font-bold text-white mb-4">
-            AI Support
+            Whop AI Bot
           </h1>
           <p className="text-xl text-zinc-400 mb-2">
-            Made by Vortex (@script)
+            Tutorial Example
           </p>
           
           <motion.div

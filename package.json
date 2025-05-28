@@ -1,5 +1,5 @@
 {
-	"name": "whop-custom-command-bot",
+	"name": "whop-ai-bot-tutorial",
 	"version": "1.0.0",
 	"private": true,
 	"scripts": {
@@ -9,20 +9,10 @@
 		"start": "next start",
 		"lint": "next lint",
 		"postinstall": "prisma generate",
-		"bot": "tsx lib/bot-new.ts",
-		"bot:prod": "node lib/bot-new.js",
+		"bot": "tsx lib/core-bot.ts",
 		"db:push": "prisma db push",
-		"db:migrate": "prisma migrate deploy",
 		"db:studio": "prisma studio",
-		"db:reset": "prisma migrate reset",
-		"type-check": "tsc --noEmit",
-		"health-check": "curl -f http://localhost:3000/api/health || exit 1",
-		"start:prod": "NODE_ENV=production npm run start",
-		"deploy:vercel": "vercel deploy --prod",
-		"docker:build": "docker build -t whop-ai-bot .",
-		"docker:run": "docker run -p 3000:3000 --env-file .env whop-ai-bot",
-		"test:cache": "node scripts/test-cache.js",
-		"test:admin": "node scripts/test-admin-auth.js"
+		"type-check": "tsc --noEmit"
 	},
 	"dependencies": {
 		"@prisma/client": "^6.8.2",
