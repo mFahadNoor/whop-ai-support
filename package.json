@@ -32,6 +32,7 @@
 		"@whop/api": "^0.0.21-canary.3",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
+		"dotenv": "^16.5.0",
 		"framer-motion": "^12.15.0",
 		"frosted-ui": "0.0.1-canary.73",
 		"gsap": "^3.13.0",
