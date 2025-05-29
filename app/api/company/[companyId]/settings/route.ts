@@ -25,7 +25,7 @@ async function checkAdminAccess(companyId: string): Promise<boolean> {
 
     console.log(`🔍 Access check result:`, hasAccess);
 
-    if (hasAccess.hasAccessToCompany.accessLevel === "admin" || hasAccess.hasAccessToCompany.accessLevel === "owner") {
+    if (hasAccess.hasAccessToCompany.accessLevel === "admin") {
       console.log(`✅ User has ${hasAccess.hasAccessToCompany.accessLevel} access to company ${companyId}`);
       return true;
     }
