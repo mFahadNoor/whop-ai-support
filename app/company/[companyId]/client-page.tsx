@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, Settings, Zap, Brain, MessageSquare, Plus, Trash2, Edit3, Save, X, HelpCircle, BarChart3, Shield } from 'lucide-react';
+import { getSettings, saveSettings, clearCache } from './actions';
 
 interface BotSettings {
   enabled: boolean;
@@ -185,12 +186,11 @@ export default function ClientPage({ companyId, isAuthorized, userId }: ClientPa
 
   const loadSettings = async () => {
     try {
-      const response = await fetch(`/api/company/${companyId}/settings`);
-      if (response.ok) {
-        const data = await response.json();
-        setSettings(data.settings || settings);
+      const result = await getSettings(companyId);
+      if (result.success) {
+        setSettings(result.settings || settings);
       } else {
-        setMessage('Failed to load settings');
+        setMessage(result.error || 'Failed to load settings');
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
@@ -199,22 +199,17 @@ export default function ClientPage({ companyId, isAuthorized, userId }: ClientPa
     setLoading(false);
   };
 
-  const saveSettings = async () => {
+  const handleSaveSettings = async () => {
     setIsSaving(true);
     setLoading(true);
     try {
-      const response = await fetch(`/api/company/${companyId}/settings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings })
-      });
+      const result = await saveSettings(companyId, settings);
 
-      if (response.ok) {
+      if (result.success) {
         setMessage('Settings saved successfully!');
         setTimeout(() => setMessage(''), 3000);
       } else {
-        const data = await response.json();
-        setMessage(data.error || 'Failed to save settings');
+        setMessage(result.error || 'Failed to save settings');
       }
     } catch (error) {
       setMessage('Error saving settings');
@@ -548,7 +543,7 @@ export default function ClientPage({ companyId, isAuthorized, userId }: ClientPa
             className="text-center"
           >
             <motion.button
-              onClick={saveSettings}
+              onClick={handleSaveSettings}
               disabled={loading}
               whileHover={{ scale: 1.02, y: -2 }}
               whileTap={{ scale: 0.98 }}

@@ -1,0 +1,291 @@
+---
+title: "Build an AI Support Bot"
+description: "Create a production-ready AI support bot for your Whop community with smart question detection and cost-efficient responses"
+---
+
+# 🤖 Build an AI Support Bot for Whop
+
+Learn how to create a production-ready AI support bot that intelligently responds to community questions while saving 80%+ on AI costs through smart question detection.
+
+## What You'll Build
+
+A sophisticated AI bot that:
+- **🧠 Smart Question Detection** - Only processes actual questions, not casual chat
+- **⚡ Instant Preset Answers** - Common questions get immediate responses
+- **📚 Knowledge Base Integration** - AI learns from your documentation
+- **⚙️ Beautiful Admin Dashboard** - Easy configuration and monitoring
+- **💰 Cost Efficient** - 80%+ savings through intelligent filtering
+
+## Prerequisites
+
+- Node.js 18+ installed
+- A Whop account with app development access
+- Basic familiarity with Next.js and TypeScript
+- A Supabase account (free tier works)
+
+## Quick Start
+
+### 1. Clone the Template
+
+```bash
+git clone https://github.com/YOUR-USERNAME/whop-ai-bot.git
+cd whop-ai-bot
+npm install
+```
+
+### 2. Environment Setup
+
+Copy the environment template:
+```bash
+cp env.example .env
+```
+
+Fill in your configuration in `.env`:
+
+```bash
+# Database (Supabase)
+DATABASE_URL="your-supabase-database-url"
+DIRECT_URL="your-supabase-direct-url"
+
+# AI Service
+OPENAI_API_KEY="your-openai-api-key"
+
+# Whop Integration
+WHOP_APP_ID="your-whop-app-id"
+WHOP_APP_SECRET="your-whop-app-secret"
+```
+
+### 3. Database Setup
+
+```bash
+npm run db:push
+```
+
+### 4. Install Whop Dev Proxy
+
+```bash
+npm install @whop-apps/dev-proxy -g
+```
+
+### 5. Configure Your Whop App
+
+Before installing your app, set these in your Whop app settings:
+- **Base URL**: `http://localhost:3000/`
+- **App path**: `/company/[companyId]`
+
+### 6. Start Development
+
+```bash
+# Start the web app with Whop proxy
+whop-proxy --command 'npx next dev --turbopack'
+
+# In a new terminal, start the AI bot
+npm run bot
+```
+
+## How It Works
+
+### Smart Question Detection
+
+The bot uses intelligent filtering to determine if a message is actually a question:
+
+```typescript
+// Only these types of messages trigger AI responses
+const questionPatterns = [
+  /\?/,                    // Contains question mark
+  /^(how|what|when|where|why|who|can|could|would|should|is|are|do|does)/i,
+  /help/i,                 // Contains "help"
+  // ... more patterns
+];
+```
+
+### Cost Optimization
+
+**Before optimization**: Every message → AI call → $$$
+**After optimization**: Smart filtering → 80% fewer AI calls → 💰
+
+### Architecture Overview
+
+```
+Community Messages → Question Detection → {
+  ✅ Is Question → Check Presets → AI Response
+  ❌ Not Question → Ignore (save money!)
+}
+```
+
+## Configuration
+
+### Admin Dashboard
+
+Visit your app at `/company/[companyId]` to configure:
+
+- **🎯 Bot Targeting**: Which channels to monitor
+- **📝 Preset Responses**: Instant answers for common questions  
+- **🤖 AI Settings**: Response style and behavior
+- **📊 Analytics**: Usage statistics and cost tracking
+
+### Preset Responses
+
+Set up instant responses for frequently asked questions:
+
+```json
+{
+  "trigger": "how to join",
+  "response": "Welcome! You can join by clicking the 'Join Community' button in your dashboard."
+}
+```
+
+### AI Personality
+
+Customize your bot's personality:
+
+```json
+{
+  "tone": "friendly",
+  "style": "helpful and concise",
+  "expertise": "Whop community support"
+}
+```
+
+## Deployment
+
+### Production Setup
+
+1. **Deploy to Vercel** (recommended):
+   ```bash
+   npm run build
+   npx vercel --prod
+   ```
+
+2. **Update Whop App Settings**:
+   - Base URL: `https://your-app.vercel.app/`
+   - App path: `/company/[companyId]`
+
+3. **Environment Variables**:
+   Set all production environment variables in your hosting platform
+
+### Database Migration
+
+Your Supabase database will automatically handle the schema:
+
+```sql
+-- Prisma automatically creates these tables
+model Company {
+  id       String @id
+  settings Json?
+}
+
+model ExperienceMapping {
+  experienceId String @id
+  companyId    String
+}
+```
+
+## Advanced Features
+
+### Custom Question Detection
+
+Extend the question detection logic:
+
+```typescript
+// lib/ai-engine.ts
+export function isLikelyQuestion(message: string): boolean {
+  // Add your custom logic
+  return customQuestionLogic(message);
+}
+```
+
+### Webhook Integration
+
+Set up real-time responses:
+
+```typescript
+// app/api/webhooks/route.ts
+export async function POST(request: Request) {
+  const { type, data } = await request.json();
+  
+  if (type === 'message.created') {
+    await processMessage(data);
+  }
+}
+```
+
+### Analytics Dashboard
+
+Monitor your bot's performance:
+
+- Response times
+- Cost savings
+- Question categories
+- User satisfaction
+
+## Best Practices
+
+### 1. Question Detection Tuning
+
+Start conservative, then adjust:
+```typescript
+// Begin with strict patterns
+const questionPatterns = [/\?/, /^how/i];
+
+// Gradually add more as needed
+```
+
+### 2. Preset Response Strategy
+
+Create presets for your top 10 most common questions first.
+
+### 3. AI Cost Management
+
+```typescript
+// Set response limits
+const maxTokens = 150; // Keep responses concise
+const maxRequestsPerHour = 100; // Rate limiting
+```
+
+### 4. Community Guidelines
+
+- Set clear expectations about bot responses
+- Provide fallback to human support
+- Regular monitoring and updates
+
+## Troubleshooting
+
+### Bot Not Responding
+
+1. Check WebSocket connection in browser console
+2. Verify environment variables
+3. Ensure experience mapping exists
+
+### High AI Costs
+
+1. Review question detection patterns
+2. Add more preset responses
+3. Implement stricter rate limiting
+
+### Database Issues
+
+```bash
+# Reset database
+npm run db:push --force-reset
+
+# View database
+npm run db:studio
+```
+
+## Support & Community
+
+- **GitHub Issues**: Report bugs and request features
+- **Documentation**: Full API reference available
+- **Community**: Join our Discord for support
+
+## What's Next?
+
+- **📊 Advanced Analytics**: Detailed performance metrics
+- **🔌 More Integrations**: Discord, Slack, and more
+- **🎨 Custom UI Themes**: Brand your admin dashboard
+- **🤖 Multi-Language Support**: Global community support
+
+---
+
+Ready to transform your Whop community with AI? [Get started now!](https://github.com/YOUR-USERNAME/whop-ai-bot) 

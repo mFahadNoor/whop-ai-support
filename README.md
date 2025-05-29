@@ -98,7 +98,7 @@ pnpm install
 # - OPENROUTER_API_KEY
 # - WHOP_API_KEY
 # - BOT_USER_ID
-```
+   ```
 
 ### Database Setup
    ```bash

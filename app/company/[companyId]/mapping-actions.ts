@@ -1,55 +1,42 @@
-import { NextRequest, NextResponse } from 'next/server';
+'use server';
+
 import { verifyUserToken } from '@whop/api';
+import { headers } from 'next/headers';
 import { dataManager } from '@/lib/data-manager';
 import { whopApi } from '@/lib/whop-api';
 import { logger } from '@/lib/shared-utils';
 
-async function authenticateUser(request: NextRequest, companyId: string) {
+async function authenticateUser(companyId: string) {
   try {
     // Verify user token from headers
-    const { userId } = await verifyUserToken(request.headers);
+    const headersList = await headers();
+    const { userId } = await verifyUserToken(headersList);
     
     if (!userId) {
-      return { error: 'No user token found', status: 401 };
+      throw new Error('No user token found');
     }
 
     // Check if user has access to this company
     const accessCheck = await whopApi.checkIfUserHasAccessToCompany({ userId, companyId });
     
     if (accessCheck.hasAccessToCompany.accessLevel !== 'owner') {
-      return { error: 'Insufficient permissions - owner access required', status: 403 };
+      throw new Error('Insufficient permissions - owner access required');
     }
 
     return { userId, success: true };
   } catch (error) {
     console.error('Authentication error:', error);
-    return { error: 'Authentication failed', status: 401 };
+    throw error;
   }
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ companyId: string }> }
-) {
+export async function createMapping(companyId: string, experienceId: string) {
   try {
-    const { companyId } = await params;
-    
     // Authenticate user
-    const auth = await authenticateUser(request, companyId);
-    if (!auth.success) {
-      return NextResponse.json(
-        { error: auth.error },
-        { status: auth.status }
-      );
-    }
-    
-    const { experienceId } = await request.json();
+    await authenticateUser(companyId);
     
     if (!experienceId) {
-      return NextResponse.json(
-        { error: 'experienceId is required' },
-        { status: 400 }
-      );
+      throw new Error('experienceId is required');
     }
     
     logger.info('Manual experience mapping request', {
@@ -61,36 +48,25 @@ export async function POST(
     // Register the experience mapping
     dataManager.registerExperience(experienceId, companyId);
     
-    return NextResponse.json({ 
+    return { 
       success: true,
       message: `Mapped experience ${experienceId} to company ${companyId}`,
       mapping: { experienceId, companyId }
-    });
+    };
     
-  } catch (error) {
+  } catch (error: any) {
     logger.error('Failed to create experience mapping', error as Error);
-    return NextResponse.json(
-      { error: 'Failed to create mapping' },
-      { status: 500 }
-    );
+    return { 
+      success: false, 
+      error: error.message || 'Failed to create mapping' 
+    };
   }
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ companyId: string }> }
-) {
+export async function getMappings(companyId: string) {
   try {
-    const { companyId } = await params;
-    
     // Authenticate user
-    const auth = await authenticateUser(request, companyId);
-    if (!auth.success) {
-      return NextResponse.json(
-        { error: auth.error },
-        { status: auth.status }
-      );
-    }
+    await authenticateUser(companyId);
     
     // Get all mappings for this company
     const stats = dataManager.getStats();
@@ -98,17 +74,18 @@ export async function GET(
       .filter(([_, mappedCompanyId]) => mappedCompanyId === companyId)
       .map(([experienceId, mappedCompanyId]) => ({ experienceId, companyId: mappedCompanyId }));
     
-    return NextResponse.json({
+    return {
+      success: true,
       companyId,
       mappings: mappingsForCompany,
       totalMappings: mappingsForCompany.length
-    });
+    };
     
-  } catch (error) {
+  } catch (error: any) {
     logger.error('Failed to get experience mappings', error as Error);
-    return NextResponse.json(
-      { error: 'Failed to get mappings' },
-      { status: 500 }
-    );
+    return { 
+      success: false, 
+      error: error.message || 'Failed to get mappings' 
+    };
   }
 } 
