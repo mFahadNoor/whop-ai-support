@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyUserToken } from '@whop/api';
 import { dataManager, isValidBotSettings } from '@/lib/data-manager';
-import { whopApi } from '@/lib/whop-api';
 
 const defaultSettings = {
   enabled: false,
@@ -16,44 +14,12 @@ const defaultSettings = {
   responseDelay: 1
 };
 
-async function authenticateUser(request: NextRequest, companyId: string) {
-  try {
-    // Verify user token from headers
-    const { userId } = await verifyUserToken(request.headers);
-    
-    if (!userId) {
-      return { error: 'No user token found', status: 401 };
-    }
-
-    // Check if user has access to this company
-    const accessCheck = await whopApi.checkIfUserHasAccessToCompany({ userId, companyId });
-    
-    if (accessCheck.hasAccessToCompany.accessLevel !== 'owner') {
-      return { error: 'Insufficient permissions - owner access required', status: 403 };
-    }
-
-    return { userId, success: true };
-  } catch (error) {
-    console.error('Authentication error:', error);
-    return { error: 'Authentication failed', status: 401 };
-  }
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ companyId: string }> }
 ) {
   try {
     const { companyId } = await params;
-    
-    // Authenticate user
-    const auth = await authenticateUser(request, companyId);
-    if (!auth.success) {
-      return NextResponse.json(
-        { error: auth.error },
-        { status: auth.status }
-      );
-    }
     
     // Get settings using data manager
     const settings = await dataManager.getBotSettings(companyId);
@@ -74,15 +40,6 @@ export async function POST(
 ) {
   try {
     const { companyId } = await params;
-    
-    // Authenticate user
-    const auth = await authenticateUser(request, companyId);
-    if (!auth.success) {
-      return NextResponse.json(
-        { error: auth.error },
-        { status: auth.status }
-      );
-    }
     
     const { settings } = await request.json();
 
@@ -115,15 +72,6 @@ export async function DELETE(
 ) {
   try {
     const { companyId } = await params;
-    
-    // Authenticate user
-    const auth = await authenticateUser(request, companyId);
-    if (!auth.success) {
-      return NextResponse.json(
-        { error: auth.error },
-        { status: auth.status }
-      );
-    }
     
     // Force clear cache for this company using data manager
     dataManager.clearCache(companyId);

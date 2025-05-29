@@ -300,7 +300,7 @@ class BotCoordinator {
     if (!companyId) {
       console.log(`🔄 No mapping found for experience ${experienceId}, checking with Whop API...`);
       companyId = await dataManager.tryFetchMappingFromDB(experienceId);
-      if (!companyId) {
+    if (!companyId) {
         console.log(`❌ No mapping found for experience ${experienceId}`);
         return;
       }
