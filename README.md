@@ -74,12 +74,70 @@ This bot is designed for efficiency:
 - **SaaS companies** running communities on Whop
 - **Anyone** looking to provide 24/7 AI support while controlling costs
 
-## 🔧 Bot Commands
+## 🚀 Quick Start & Development
 
-Users can interact with the bot using simple commands:
+### Prerequisites
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/whop-ai-bot.git
+cd whop-ai-bot
 
-- `!help` - Show available commands and bot information
-- `!refresh` - Reload bot configuration (admin feature)
+# Install dependencies
+npm install
+# or
+pnpm install
+```
+
+### Environment Setup
+```bash
+# Copy environment template
+cp env.example .env
+
+# Edit .env with your credentials:
+# - DATABASE_URL (PostgreSQL)
+# - OPENROUTER_API_KEY
+# - WHOP_API_KEY
+# - BOT_USER_ID
+```
+
+### Database Setup
+```bash
+# Push schema to database
+npm run db:push
+
+# (Optional) Open Prisma Studio
+npm run db:studio
+```
+
+### Development Mode
+
+**Important**: For Whop integration to work properly, you must use the whop proxy in development:
+
+```bash
+# Start development server with Whop proxy (recommended)
+npm run dev
+
+# Alternative: Manual whop proxy command
+npx whop-proxy --command 'npx next dev --turbopack'
+
+# ❌ This won't work with Whop features:
+# npx next dev
+```
+
+The bot will automatically start listening for WebSocket connections when you visit the dashboard at `http://localhost:3000/company/[companyId]`.
+
+### Production Deployment
+
+```bash
+# Build for production
+npm run build
+
+# Start production server
+npm start
+
+# Run bot independently (if needed)
+npm run bot
+```
 
 ## 🏗️ Architecture
 

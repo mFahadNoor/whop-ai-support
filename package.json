@@ -1,22 +1,9 @@
 {
-	"name": "whop-ai-bot",
+	"name": "whop-ai-support",
 	"version": "1.0.0",
-	"description": "A production-ready AI support bot for Whop communities with intelligent response optimization and cost-efficient token usage.",
-	"keywords": ["whop", "ai", "bot", "support", "chatbot", "openai", "claude", "community"],
-	"author": "Whop AI Bot Contributors",
-	"license": "MIT",
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/yourusername/whop-ai-bot.git"
-	},
-	"bugs": {
-		"url": "https://github.com/yourusername/whop-ai-bot/issues"
-	},
-	"homepage": "https://github.com/yourusername/whop-ai-bot#readme",
-	"private": false,
 	"scripts": {
 		"whop-proxy": "whop-proxy",
-		"dev": "whop-proxy --command 'next dev --turbopack'",
+		"dev": "whop-proxy --command 'npx next dev --turbopack'",
 		"build": "prisma generate && next build",
 		"start": "next start",
 		"lint": "next lint",
@@ -58,7 +45,7 @@
 		"@types/node": "^20",
 		"@types/react": "^19",
 		"@types/react-dom": "^19",
-		"@whop-apps/dev-proxy": "0.0.1-canary.110",
+		"@whop-apps/dev-proxy": "^0.0.1-canary.110",
 		"tailwindcss": "^4",
 		"tsx": "^4.19.4",
 		"tw-animate-css": "^1.3.0",

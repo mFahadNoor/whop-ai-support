@@ -1,43 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyUserToken, whopApi } from "@/lib/whop-api";
-import { hasAccess } from "@whop-apps/sdk";
-import { headers } from 'next/headers';
 import { dataManager, isValidBotSettings } from '@/lib/data-manager';
-import { prisma } from "@/lib/data-manager";
-
-// Helper function to check if user has admin access to the company
-async function checkAdminAccess(companyId: string): Promise<boolean> {
-  try {
-    const headersList = await headers();
-    const userToken = await verifyUserToken(headersList);
-    
-    if (!userToken) {
-      console.log('❌ No user token found');
-      return false;
-    }
-
-    console.log(`🔍 Checking admin access for user ${userToken.userId} to company ${companyId}`);
-
-    // Check if user has admin access to the company
-    const accessResult = await whopApi.checkIfUserHasAccessToCompany({
-      userId: userToken.userId,
-      companyId,
-    });
-
-    console.log(`🔍 Access check result:`, accessResult);
-
-    if (accessResult.hasAccessToCompany.accessLevel === "owner") {
-      console.log(`✅ User has ${accessResult.hasAccessToCompany.accessLevel} access to company ${companyId}`);
-      return true;
-    }
-
-    console.log(`❌ User has insufficient access level: ${accessResult.hasAccessToCompany.accessLevel}`);
-    return false;
-  } catch (error) {
-    console.error('Error checking admin access:', error);
-    return false;
-  }
-}
 
 const defaultSettings = {
   enabled: false,
@@ -59,15 +21,6 @@ export async function GET(
   try {
     const { companyId } = await params;
     
-    // Check if user has admin access to this company
-    const hasAdminAccess = await checkAdminAccess(companyId);
-    if (!hasAdminAccess) {
-      return NextResponse.json(
-        { error: 'Unauthorized: Admin access required' },
-        { status: 403 }
-      );
-    }
-    
     // Get settings using data manager
     const settings = await dataManager.getBotSettings(companyId);
 
@@ -87,15 +40,6 @@ export async function POST(
 ) {
   try {
     const { companyId } = await params;
-    
-    // Check if user has admin access to this company
-    const hasAdminAccess = await checkAdminAccess(companyId);
-    if (!hasAdminAccess) {
-      return NextResponse.json(
-        { error: 'Unauthorized: Admin access required' },
-        { status: 403 }
-      );
-    }
     
     const { settings } = await request.json();
 
@@ -128,15 +72,6 @@ export async function DELETE(
 ) {
   try {
     const { companyId } = await params;
-    
-    // Check if user has admin access to this company
-    const hasAdminAccess = await checkAdminAccess(companyId);
-    if (!hasAdminAccess) {
-      return NextResponse.json(
-        { error: 'Unauthorized: Admin access required' },
-        { status: 403 }
-      );
-    }
     
     // Force clear cache for this company using data manager
     dataManager.clearCache(companyId);

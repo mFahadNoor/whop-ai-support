@@ -3,12 +3,11 @@
  * 
  * This is the main entry point for the Whop AI bot service. It orchestrates
  * all the different components and provides the core bot functionality including
- * WebSocket connection management, message processing, and bot commands.
+ * WebSocket connection management, message processing, and AI responses.
  * 
  * Key Features:
  * - WebSocket connection to Whop with automatic reconnection
  * - Real-time message processing and AI response generation
- * - Bot command handling (!help, !refresh)
  * - Multi-tenant support for multiple companies/experiences
  * - Graceful shutdown and error recovery
  * - Health monitoring and maintenance tasks
@@ -18,10 +17,6 @@
  * - Integrates DataManager for settings and caching
  * - Uses AIEngine for intelligent response generation
  * - Leverages WhopAPI for sending messages and API calls
- * 
- * Bot Commands:
- * - `!help` - Shows available commands and bot information
- * - `!refresh` - Reloads bot configuration and clears cache
  * 
  * Message Processing Flow:
  * 1. Receive message from WebSocket
@@ -299,78 +294,23 @@ class BotCoordinator {
   }
 
   private async processMessageInternal(message: ProcessedMessage): Promise<void> {
-    let companyId = dataManager.getCompanyId(message.experienceId);
-    const messageKey = `${message.entityId}:${message.feedId}`;
+    const experienceId = message.experienceId;
+    let companyId = dataManager.getCompanyId(experienceId);
     
     if (!companyId) {
-      companyId = await dataManager.tryFetchMappingFromDB(message.experienceId);
-    }
-    
-    if (!companyId) {
-      const retryKey = message.experienceId;
-      const currentRetries = this.retryCount.get(retryKey) || 0;
-      
-      if (currentRetries >= this.MAX_PENDING_RETRIES) {
-        logger.error('Max retries exceeded for experience mapping, dropping message', undefined, {
-          experienceId: message.experienceId,
-          retries: currentRetries,
-          action: 'max_retries_exceeded',
-        });
-        this.retryCount.delete(retryKey);
-        this.processingMessages.delete(messageKey);
+      console.log(`🔄 No mapping found for experience ${experienceId}, checking with Whop API...`);
+      companyId = await dataManager.tryFetchMappingFromDB(experienceId);
+      if (!companyId) {
+        console.log(`❌ No mapping found for experience ${experienceId}`);
         return;
       }
-
-      console.log(`⏳ No mapping for experience ${message.experienceId}, buffering (${currentRetries + 1}/${this.MAX_PENDING_RETRIES})`);
-      
-      if (!this.pendingMessages.has(message.experienceId)) {
-        this.pendingMessages.set(message.experienceId, []);
-      }
-      this.pendingMessages.get(message.experienceId)!.push(message);
-      
-      this.processingMessages.delete(messageKey);
-      this.retryCount.set(retryKey, currentRetries + 1);
-
-      const delay = Math.min(
-        this.INITIAL_RETRY_DELAY * Math.pow(2, currentRetries),
-        this.MAX_RETRY_DELAY
-      ) + Math.random() * 100;
-      
-      setTimeout(async () => {
-        await this.processPendingMessages(message.experienceId);
-      }, delay);
-      
-      return;
     }
 
-    this.retryCount.delete(message.experienceId);
-    console.log(`✅ Processing ${companyId.substring(0, 8)}...`);
-
-    const shouldForceRefresh = Math.random() < 0.1;
+    const shouldForceRefresh = false;
     const settings = await dataManager.getBotSettings(companyId, shouldForceRefresh);
 
     const messageLower = message.content.toLowerCase();
     const username = message.user.username || message.user.name || 'Unknown';
-
-    // Handle !refresh command
-    if (messageLower === "!refresh" || messageLower === "!reload") {
-      dataManager.clearCache(companyId);
-      const refreshedSettings = await dataManager.getBotSettings(companyId, true);
-      const refreshResponse = `🔄 Configuration refreshed! Bot is ${refreshedSettings.enabled ? 'enabled' : 'disabled'}`;
-      console.log(`🔄 Config refreshed for ${username}`);
-      
-      const success = await whopAPI.sendMessageWithRetry(message.feedId, refreshResponse);
-      return;
-    }
-
-    // Handle !help command
-    if (messageLower === "!help") {
-      const helpResponse = "Whop AI Bot Commands:\n• !help - Show this help\n• !refresh - Reload bot configuration";
-      console.log(`ℹ️ Help requested by ${username}`);
-      
-      const success = await whopAPI.sendMessageWithRetry(message.feedId, helpResponse);
-      return;
-    }
 
     // Handle AI responses
     if (settings.enabled && (settings.knowledgeBase || (settings.presetQA && settings.presetQA.length > 0))) {
@@ -649,8 +589,7 @@ export async function startBot() {
   console.log('  • Smart AI question detection');
   console.log('  • Admin-only configuration');
   console.log('  • Real-time responses');
-  console.log('  • Rate limiting & caching');
-  console.log('  • Bot commands (!help, !refresh)\n');
+  console.log('  • Rate limiting & caching\n');
   
   await botWebSocket.start();
 }
