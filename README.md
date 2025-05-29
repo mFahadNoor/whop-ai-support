@@ -77,21 +77,21 @@ This bot is designed for efficiency:
 ## 🚀 Quick Start & Development
 
 ### Prerequisites
-```bash
+   ```bash
 # Clone the repository
 git clone https://github.com/yourusername/whop-ai-bot.git
 cd whop-ai-bot
 
 # Install dependencies
-npm install
+   npm install
 # or
 pnpm install
-```
+   ```
 
 ### Environment Setup
-```bash
+   ```bash
 # Copy environment template
-cp env.example .env
+   cp env.example .env
 
 # Edit .env with your credentials:
 # - DATABASE_URL (PostgreSQL)
@@ -101,19 +101,19 @@ cp env.example .env
 ```
 
 ### Database Setup
-```bash
+   ```bash
 # Push schema to database
-npm run db:push
+   npm run db:push
 
 # (Optional) Open Prisma Studio
 npm run db:studio
-```
+   ```
 
 ### Development Mode
 
 **Important**: For Whop integration to work properly, you must install and use the Whop dev proxy:
 
-```bash
+   ```bash
 # First, install the Whop dev proxy globally
 npm install @whop-apps/dev-proxy -g
 
