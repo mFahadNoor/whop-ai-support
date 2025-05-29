@@ -365,4 +365,4 @@ class WhopAPIService {
 // EXPORTS
 // =============================================================================
 
-export const whopAPI = new WhopAPIService(); 
+export const whopAPI = new WhopAPIService();

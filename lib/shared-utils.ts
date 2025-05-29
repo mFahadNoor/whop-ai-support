@@ -129,7 +129,7 @@ interface AppConfig {
   // Database
   DATABASE_URL: string;
   DIRECT_URL?: string;
-
+  
   // AI Configuration
   OPENROUTER_API_KEY: string;
   OPENROUTER_MODEL: string;
@@ -143,15 +143,15 @@ interface AppConfig {
   NODE_ENV: string;
   PORT: number;
   LOG_LEVEL: string;
-
+  
   // Rate Limiting
   AI_RATE_LIMIT_PER_MINUTE: number;
   MESSAGE_RATE_LIMIT_PER_MINUTE: number;
-
+  
   // Caching & Performance
   CACHE_TTL_MINUTES: number;
   MAX_MEMORY_CACHE_SIZE: number;
-
+  
   // Security & Validation
   MAX_MESSAGE_LENGTH: number;
   MAX_KNOWLEDGE_BASE_SIZE: number;

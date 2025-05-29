@@ -111,18 +111,21 @@ npm run db:studio
 
 ### Development Mode
 
-**Important**: For Whop integration to work properly, you must use the whop proxy in development:
+**Important**: For Whop integration to work properly, you must install and use the Whop dev proxy:
 
 ```bash
-# Start development server with Whop proxy (recommended)
-npm run dev
+# First, install the Whop dev proxy globally
+npm install @whop-apps/dev-proxy -g
 
-# Alternative: Manual whop proxy command
-npx whop-proxy --command 'npx next dev --turbopack'
-
-# ❌ This won't work with Whop features:
-# npx next dev
+# Then start the development server with proxy
+whop-proxy --command 'npx next dev --turbopack'
 ```
+
+**⚠️ Do NOT use `npm run dev` alone** - it won't include the Whop proxy and iframe integration won't work!
+
+**Before installing the app**: Configure your Whop app settings:
+- **Base URL**: `http://localhost:3000/`
+- **App path**: `/company/[companyId]`
 
 The bot will automatically start listening for WebSocket connections when you visit the dashboard at `http://localhost:3000/company/[companyId]`.
 

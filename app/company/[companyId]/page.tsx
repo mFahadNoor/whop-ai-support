@@ -18,7 +18,7 @@ export default async function CompanyPage({ params }: { params: Promise<{ compan
     // You can add more specific company ownership checks here if needed
     return <ClientPage companyId={resolvedParams.companyId} isAuthorized={true} userId={userId} />;
     
-  } catch (error) {
+    } catch (error) {
     console.error('Authentication error:', error);
     return <ClientPage companyId={resolvedParams.companyId} isAuthorized={false} userId={null} />;
   }
