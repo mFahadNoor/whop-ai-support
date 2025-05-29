@@ -59,8 +59,6 @@ export interface BotSettings {
   responseStyle: 'professional' | 'friendly' | 'casual' | 'technical' | 'custom';
   autoResponse: boolean;              // Whether to auto-respond to questions
   responseDelay: number;              // Delay before responding (in ms)
-  presetQuestions?: string[];         // Legacy field for preset questions
-  presetAnswers?: string[];           // Legacy field for preset answers
 }
 
 /**
@@ -127,41 +125,39 @@ export interface WebSocketMessage {
  * - Performance: Retry logic and timing
  * - Security: Input validation and limits
  */
-export interface Config {
-  // Environment
-  NODE_ENV: string;
-  
+interface AppConfig {
   // Database
   DATABASE_URL: string;
   DIRECT_URL?: string;
-  ENABLE_DB_LOGGING: boolean;
-  
-  // Whop API
-  WHOP_APP_API_KEY: string;
-  WHOP_AGENT_USER_ID?: string;
-  WHOP_WEBHOOK_SECRET?: string;
-  
-  // OpenRouter AI
+
+  // AI Configuration
   OPENROUTER_API_KEY: string;
   OPENROUTER_MODEL: string;
-  
+
+  // Whop Configuration
+  WHOP_APP_API_KEY: string;
+  WHOP_AGENT_USER_ID?: string;
+  WHOP_APP_ID?: string;
+
+  // Application Settings
+  NODE_ENV: string;
+  PORT: number;
+  LOG_LEVEL: string;
+
   // Rate Limiting
   AI_RATE_LIMIT_PER_MINUTE: number;
   MESSAGE_RATE_LIMIT_PER_MINUTE: number;
-  
-  // Caching
+
+  // Caching & Performance
   CACHE_TTL_MINUTES: number;
   MAX_MEMORY_CACHE_SIZE: number;
-  
-  // Performance
-  MAX_RETRIES: number;
-  RETRY_DELAY_MS: number;
-  WEBSOCKET_RECONNECT_DELAY_MS: number;
-  MAINTENANCE_INTERVAL_MINUTES: number;
-  
-  // Security
+
+  // Security & Validation
   MAX_MESSAGE_LENGTH: number;
   MAX_KNOWLEDGE_BASE_SIZE: number;
+
+  // Optional Features
+  ENABLE_DB_LOGGING: boolean;
 }
 
 // =============================================================================
@@ -226,11 +222,13 @@ function parseEnvBool(key: string, defaultValue: boolean): boolean {
  * @returns Complete application configuration
  * @throws Error if any required variables are missing or invalid
  */
-function loadConfig(): Config {
+function loadConfig(): AppConfig {
   try {
-    const config: Config = {
+    const config: AppConfig = {
       // Environment
       NODE_ENV: getOptionalEnv('NODE_ENV', 'development'),
+      PORT: parseEnvInt('PORT', 3000),
+      LOG_LEVEL: getOptionalEnv('LOG_LEVEL', 'info'),
       
       // Database
       DATABASE_URL: getRequiredEnv('DATABASE_URL'),
@@ -240,7 +238,7 @@ function loadConfig(): Config {
       // Whop API
       WHOP_APP_API_KEY: getRequiredEnv('WHOP_APP_API_KEY'),
       WHOP_AGENT_USER_ID: getOptionalEnv('WHOP_AGENT_USER_ID'),
-      WHOP_WEBHOOK_SECRET: getOptionalEnv('WHOP_WEBHOOK_SECRET'),
+      WHOP_APP_ID: getOptionalEnv('WHOP_APP_ID'),
       
       // OpenRouter AI
       OPENROUTER_API_KEY: getRequiredEnv('OPENROUTER_API_KEY'),
@@ -253,12 +251,6 @@ function loadConfig(): Config {
       // Caching
       CACHE_TTL_MINUTES: parseEnvInt('CACHE_TTL_MINUTES', 5),
       MAX_MEMORY_CACHE_SIZE: parseEnvInt('MAX_MEMORY_CACHE_SIZE', 1000),
-      
-      // Performance
-      MAX_RETRIES: parseEnvInt('MAX_RETRIES', 3),
-      RETRY_DELAY_MS: parseEnvInt('RETRY_DELAY_MS', 1000),
-      WEBSOCKET_RECONNECT_DELAY_MS: parseEnvInt('WEBSOCKET_RECONNECT_DELAY_MS', 5000),
-      MAINTENANCE_INTERVAL_MINUTES: parseEnvInt('MAINTENANCE_INTERVAL_MINUTES', 10),
       
       // Security
       MAX_MESSAGE_LENGTH: parseEnvInt('MAX_MESSAGE_LENGTH', 2000),
@@ -278,8 +270,9 @@ function loadConfig(): Config {
   }
 }
 
-function validateConfig(config: Config): void {
+function validateConfig(config: AppConfig): void {
   const errors: string[] = [];
+  const warnings: string[] = [];
 
   // Validate required fields
   if (!config.WHOP_APP_API_KEY) {
@@ -292,6 +285,11 @@ function validateConfig(config: Config): void {
   
   if (!config.DATABASE_URL) {
     errors.push('DATABASE_URL is required');
+  }
+
+  // Check optional but important fields
+  if (!config.WHOP_AGENT_USER_ID) {
+    warnings.push('WHOP_AGENT_USER_ID is not set - bot may not be able to send messages');
   }
 
   // Validate ranges
@@ -309,6 +307,10 @@ function validateConfig(config: Config): void {
 
   if (errors.length > 0) {
     throw new Error(`Configuration validation failed:\n${errors.join('\n')}`);
+  }
+
+  if (warnings.length > 0) {
+    console.warn(`⚠️  Configuration warnings:\n${warnings.join('\n')}`);
   }
 }
 

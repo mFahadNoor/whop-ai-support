@@ -1,195 +1,118 @@
-# 🤖 AI Support Bot
+# 🤖 Whop AI Bot
 
-A production-ready AI-powered support bot for Whop communities with advanced token optimization and intelligent response prioritization.
+**A production-ready AI support bot for Whop communities with intelligent response optimization and cost-efficient token usage.**
 
-## ✨ Features
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-000000?logo=next.js&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-316192?logo=postgresql&logoColor=white)
 
-- **Smart Question Detection**: Only processes messages with question indicators (saves 80%+ tokens)
-- **Preset Q&A Priority**: Direct answers for common questions without AI processing
-- **Knowledge Base Integration**: AI-powered responses using community-specific information
-- **Admin-Only Configuration**: Secure access - only Whop company admins can modify bot settings
-- **Production-Grade Logging**: Comprehensive monitoring and error tracking
-- **Rate Limiting**: Prevents API abuse and manages costs
-- **Response Caching**: 30-second cache for similar questions with automatic invalidation
-- **PostgreSQL Support**: Scalable database with Supabase integration
-- **Health Monitoring**: Built-in health checks for deployment monitoring
+## ✨ What It Does
 
-## 🔧 Recent Fixes & Improvements
+Transform your Whop community with an AI-powered support bot that:
 
-### Fixed Company Mapping Issues
-- **Enhanced Retry Logic**: Exponential backoff with jitter for mapping failures
-- **Improved Error Handling**: Better logging and max retry limits to prevent infinite loops
-- **Database Fallback**: Attempt to fetch mappings from database when WebSocket data is delayed
-- **Faster Reconnection**: Reduced initial retry delay from 2000ms to 500ms
+- **🧠 Smart Question Detection** - Only processes actual questions, saving 80%+ on AI costs
+- **⚡ Instant Preset Answers** - Common questions get immediate responses without AI calls
+- **📚 Knowledge Base Integration** - AI responses tailored to your community's specific information
+- **🔒 Admin-Only Configuration** - Secure dashboard accessible only to company admins
+- **💰 Cost Optimized** - Advanced caching and filtering dramatically reduces API usage
+- **🔄 Real-time Responses** - WebSocket-based for instant message processing
+- **📊 Production Ready** - Built-in rate limiting, error handling, and monitoring
 
-### Fixed Stale Cache Issues
-- **Reduced Cache TTL**: Changed from 5 minutes to 30 seconds for faster updates
-- **Automatic Cache Invalidation**: Settings updates via web app now immediately clear cache
-- **Force Refresh API**: New DELETE endpoint for manual cache clearing
-- **Random Cache Refresh**: 10% chance to force refresh on each request for freshness
+## 🚀 Key Features
 
-### Enhanced Bot Commands
-- **!refresh Command**: Manually reload bot configuration without restart
-- **Improved !help**: Now shows all available commands
-- **Better Error Messages**: More descriptive responses for debugging
+### Smart AI Processing
+- **Question filtering**: Only processes messages with "?" or question words
+- **Response caching**: 30-second cache prevents duplicate AI calls
+- **Preset Q&A**: Instant answers for common questions
+- **Multiple AI models**: Support for Claude, GPT-4, and others via OpenRouter
 
-### Production Reliability
-- **Better WebSocket Handling**: Exponential backoff with max reconnection attempts
-- **Enhanced Logging**: Structured logging with action tracking
-- **Memory Management**: Improved cleanup intervals and larger cache capacities
-- **Graceful Shutdown**: Better signal handling and cleanup
+### Admin Experience
+- **Beautiful dashboard**: Modern, responsive configuration interface
+- **Real-time settings**: Changes take effect immediately
+- **Secure access**: Only Whop company admins can modify settings
+- **Multiple response styles**: Professional, friendly, casual, technical, or custom
 
-## 🔒 Security & Admin Access
+### Production Features
+- **Rate limiting**: Prevents API abuse and quota exhaustion
+- **Auto-reconnection**: WebSocket connection management with exponential backoff
+- **Database persistence**: PostgreSQL backend with Prisma ORM
+- **Health monitoring**: Built-in maintenance and cleanup routines
+- **Graceful degradation**: Continues working even if services are temporarily unavailable
 
-### Admin Authentication
+## 💡 Cost Savings
 
-The bot configuration interface is protected by Whop's built-in authentication system. Only authorized users of each company can access and modify bot settings:
+This bot is designed for efficiency:
 
-- **Automatic Authorization**: Uses Whop SDK's `hasAccess` function with `authorized-{companyId}` pattern
-- **API Protection**: All settings endpoints (GET, POST, DELETE) require admin access
-- **Frontend Protection**: Configuration UI shows "Access Denied" for unauthorized users
-- **Secure by Default**: No additional setup needed - leverages your existing Whop permissions
+- **80-90% token reduction** compared to processing all messages
+- **Smart caching** prevents duplicate AI calls
+- **Preset answers** bypass AI entirely for common questions
+- **Message filtering** skips non-questions, spam, and duplicates
 
-### Who Can Configure the Bot?
+**Example**: Instead of 1000 AI calls per day, you might only make 100-200, saving hundreds of dollars monthly.
 
-- ✅ Company owners and admins
-- ❌ Regular members and non-members
-- ❌ Unauthorized API requests
+## 🛠️ Tech Stack
 
-### Access Control Implementation
+- **Backend**: Next.js 15 with TypeScript
+- **Database**: PostgreSQL with Prisma ORM
+- **AI**: OpenRouter (Claude, GPT-4, Gemini, etc.)
+- **Platform**: Whop SDK for community integration
+- **UI**: React with Framer Motion animations
+- **Styling**: Tailwind CSS with shadcn/ui components
 
-```typescript
-// Automatic admin check on all settings routes
-const hasAdminAccess = await hasAccess({ 
-  to: `authorized-${companyId}`, 
-  headers: await headers() 
-});
+## 📋 Requirements
 
-if (!hasAdminAccess) {
-  return NextResponse.json(
-    { error: 'Unauthorized: Admin access required' },
-    { status: 403 }
-  );
-}
-```
+- Node.js 18+ and npm/pnpm
+- PostgreSQL database (Supabase recommended)
+- OpenRouter API key
+- Whop App API key and Bot User ID
 
-This ensures that only people with proper permissions can:
-- View bot configuration
-- Modify AI settings  
-- Update knowledge base
-- Manage preset Q&A
-- Clear caches
+## 🎯 Perfect For
 
-## 🚀 Quick Start
+- **Community managers** who want to reduce support workload
+- **Course creators** with frequently asked questions
+- **SaaS companies** running communities on Whop
+- **Anyone** looking to provide 24/7 AI support while controlling costs
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/ai-support.git
-   cd ai-support
-   ```
+## 🔧 Bot Commands
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+Users can interact with the bot using simple commands:
 
-3. **Set up environment variables**
-   ```bash
-   cp env.example .env
-   # Edit .env with your configuration
-   ```
-
-4. **Set up database**
-   ```bash
-   npm run db:push
-   ```
-
-5. **Start development server**
-   ```bash
-   npm run dev
-   ```
-
-6. **Start the bot (in another terminal)**
-   ```bash
-   npm run bot
-   ```
-
-## 🧪 Testing Cache Functionality
-
-Test that cache invalidation is working properly:
-
-```bash
-# Test cache invalidation for a specific company
-npm run test:cache demo
-
-# Or test with a specific company ID
-npm run test:cache biz_your_company_id
-   ```
-
-## 🔧 Environment Variables
-
-Key environment variables needed:
-
-```env
-# Database
-DATABASE_URL="postgresql://..."
-DIRECT_URL="postgresql://..."
-
-# AI Service
-OPENROUTER_API_KEY="your_api_key"
-OPENROUTER_MODEL="anthropic/claude-3.5-sonnet"
-
-# Whop Integration
-WHOP_APP_API_KEY="your_WHOP_APP_API_KEY"
-WHOP_AGENT_USER_ID="your_bot_user_id"
-```
-
-## 💡 Token Optimization Features
-
-- **Question Filtering**: Only processes messages containing "?" or question words
-- **Preset Q&A**: Direct answers bypass AI entirely
-- **Response Caching**: 30-second cache for similar questions with auto-invalidation
-- **Message Validation**: Filters spam, short messages, and emoji-only content
-- **Smart Deduplication**: Prevents processing duplicate requests
-
-**Expected Token Savings: 80-90%** compared to processing all messages.
-
-## 📊 Commands
-
-- `!help` - Show bot information and available commands
-- `!refresh` - Reload bot configuration (clears cache)
+- `!help` - Show available commands and bot information
+- `!refresh` - Reload bot configuration (admin feature)
 
 ## 🏗️ Architecture
 
-- **Next.js 15** - Modern React framework
-- **PostgreSQL** - Production database with Prisma ORM
-- **OpenRouter** - AI API integration
-- **Whop SDK** - Community platform integration
-- **Production Logging** - Structured logging with metrics
+The bot uses a modular architecture:
 
-## 🐛 Troubleshooting
+- **Core Bot**: WebSocket connection and message orchestration
+- **AI Engine**: Smart question processing and response generation
+- **Data Manager**: Settings persistence and caching
+- **API Services**: Whop platform integration and message sending
 
-### Bot Not Responding to Updated Settings
+## 📈 Monitoring
 
-1. **Check if cache was invalidated**: Settings updates should automatically clear cache
-2. **Manual cache clear**: Use the `!refresh` command in chat
-3. **API cache clear**: Send DELETE request to `/api/company/[companyId]/settings`
-4. **Restart bot**: As last resort, restart the bot process
+Built-in monitoring includes:
 
-### Company Mapping Issues
+- Message processing statistics
+- AI API usage tracking
+- Cache hit/miss ratios
+- Error rates and types
+- System health metrics
 
-1. **Check logs**: Look for "No company mapping" messages
-2. **Wait for retry**: Bot will retry mapping lookup with exponential backoff
-3. **Check WebSocket connection**: Ensure bot is connected to Whop's WebSocket
-4. **Verify experience ID**: Ensure the experience is properly configured in Whop
+## 🔒 Security
 
-### Performance Issues
-
-1. **Monitor system stats**: Check bot output for system statistics
-2. **Review rate limits**: Ensure AI rate limits aren't being exceeded
-3. **Database performance**: Monitor PostgreSQL performance and connections
-4. **Memory usage**: Bot includes automatic cleanup and memory management
+- **Admin-only access** to configuration
+- **Input sanitization** and validation
+- **Rate limiting** to prevent abuse
+- **Environment variable protection**
 
 ## 📝 License
 
-MIT License - feel free to use for your own communities! 
+MIT License - feel free to use this for your own communities!
+
+---
+
+**Ready to get started?** Check out the installation documentation to set up your AI bot in minutes.
+
+**Need help?** Create an [issue](https://github.com/whop-ai-bot/issues) or join the community discussion. 

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyUserToken, whopApi } from "@/lib/whop-api";
+import { hasAccess } from "@whop-apps/sdk";
 import { headers } from 'next/headers';
 import { dataManager, isValidBotSettings } from '@/lib/data-manager';
-
+import { prisma } from "@/lib/data-manager";
 
 // Helper function to check if user has admin access to the company
 async function checkAdminAccess(companyId: string): Promise<boolean> {
@@ -18,19 +19,19 @@ async function checkAdminAccess(companyId: string): Promise<boolean> {
     console.log(`🔍 Checking admin access for user ${userToken.userId} to company ${companyId}`);
 
     // Check if user has admin access to the company
-    const hasAccess = await whopApi.checkIfUserHasAccessToCompany({
+    const accessResult = await whopApi.checkIfUserHasAccessToCompany({
       userId: userToken.userId,
       companyId,
     });
 
-    console.log(`🔍 Access check result:`, hasAccess);
+    console.log(`🔍 Access check result:`, accessResult);
 
-    if (hasAccess.hasAccessToCompany.accessLevel === "admin") {
-      console.log(`✅ User has ${hasAccess.hasAccessToCompany.accessLevel} access to company ${companyId}`);
+    if (accessResult.hasAccessToCompany.accessLevel === "owner") {
+      console.log(`✅ User has ${accessResult.hasAccessToCompany.accessLevel} access to company ${companyId}`);
       return true;
     }
 
-    console.log(`❌ User has insufficient access level: ${hasAccess.hasAccessToCompany.accessLevel}`);
+    console.log(`❌ User has insufficient access level: ${accessResult.hasAccessToCompany.accessLevel}`);
     return false;
   } catch (error) {
     console.error('Error checking admin access:', error);

@@ -94,7 +94,6 @@ class MessageProcessor {
 
     // Check for duplicates
     if (this.processedMessages.has(messageId)) {
-      console.log(`🔄 Skipping duplicate message: ${messageId}`);
       return null;
     }
 
@@ -109,7 +108,6 @@ class MessageProcessor {
 
     // Skip bot's own messages
     if (post.user?.id === WHOP_AGENT_USER_ID) {
-      console.log(`🤖 Skipping bot's own message`);
       return null;
     }
 
@@ -132,7 +130,6 @@ class MessageProcessor {
       if (recentUserMessage && 
           recentUserMessage.content === messageContent && 
           (now.getTime() - recentUserMessage.timestamp.getTime()) < this.DUPLICATE_WINDOW_MS) {
-        console.log(`🔄 Skipping duplicate content from user within ${this.DUPLICATE_WINDOW_MS/1000}s`);
         return null;
       }
       
@@ -324,7 +321,7 @@ class BotCoordinator {
         return;
       }
 
-      console.log(`⏳ No company mapping for experience ${message.experienceId} yet, buffering message (retry ${currentRetries + 1}/${this.MAX_PENDING_RETRIES})...`);
+      console.log(`⏳ No mapping for experience ${message.experienceId}, buffering (${currentRetries + 1}/${this.MAX_PENDING_RETRIES})`);
       
       if (!this.pendingMessages.has(message.experienceId)) {
         this.pendingMessages.set(message.experienceId, []);
@@ -347,11 +344,10 @@ class BotCoordinator {
     }
 
     this.retryCount.delete(message.experienceId);
-    console.log(`🎯 Processing message for company ${companyId}`);
+    console.log(`✅ Processing ${companyId.substring(0, 8)}...`);
 
     const shouldForceRefresh = Math.random() < 0.1;
     const settings = await dataManager.getBotSettings(companyId, shouldForceRefresh);
-    console.log(`⚙️ Bot settings:`, { enabled: settings.enabled, hasKnowledgeBase: !!settings.knowledgeBase });
 
     const messageLower = message.content.toLowerCase();
     const username = message.user.username || message.user.name || 'Unknown';
@@ -361,24 +357,18 @@ class BotCoordinator {
       dataManager.clearCache(companyId);
       const refreshedSettings = await dataManager.getBotSettings(companyId, true);
       const refreshResponse = `🔄 Configuration refreshed! Bot is ${refreshedSettings.enabled ? 'enabled' : 'disabled'}`;
-      console.log(`🔄 Executing !refresh command for ${username} in company ${companyId}`);
+      console.log(`🔄 Config refreshed for ${username}`);
       
       const success = await whopAPI.sendMessageWithRetry(message.feedId, refreshResponse);
-      if (success) {
-        console.log(`✅ Refresh command completed for ${username}`);
-      }
       return;
     }
 
     // Handle !help command
     if (messageLower === "!help") {
       const helpResponse = "Whop AI Bot Commands:\n• !help - Show this help\n• !refresh - Reload bot configuration";
-      console.log(`🆘 Executing !help command for ${username}`);
+      console.log(`ℹ️ Help requested by ${username}`);
       
       const success = await whopAPI.sendMessageWithRetry(message.feedId, helpResponse);
-      if (success) {
-        console.log(`✅ Help command completed for ${username}`);
-      }
       return;
     }
 
@@ -437,7 +427,6 @@ class BotCoordinator {
   private async processPendingMessages(experienceId: string): Promise<void> {
     const companyId = dataManager.getCompanyId(experienceId);
     if (!companyId) {
-      console.log(`⏳ Still no company mapping for experience ${experienceId}, will retry later`);
       return;
     }
 
@@ -446,7 +435,7 @@ class BotCoordinator {
       return;
     }
 
-    console.log(`🔄 Processing ${pendingMessages.length} buffered messages for experience ${experienceId} (company ${companyId})`);
+    console.log(`🔄 Processing ${pendingMessages.length} buffered messages`);
 
     this.retryCount.delete(experienceId);
 
@@ -473,7 +462,7 @@ class BotCoordinator {
   }
 
   performMaintenance() {
-    console.log('🧹 Performing system maintenance...');
+    console.log('🧹 Running maintenance...');
     
     messageProcessor.cleanup();
     dataManager.cleanupExpiredCache();
@@ -484,14 +473,10 @@ class BotCoordinator {
     for (const [experienceId, messages] of this.pendingMessages.entries()) {
       const oldestMessage = messages[0];
       if (oldestMessage && now - new Date(oldestMessage.user.id).getTime() > staleThreshold) {
-        console.log(`🗑️ Removing stale pending messages for experience ${experienceId}`);
         this.pendingMessages.delete(experienceId);
         this.retryCount.delete(experienceId);
       }
     }
-    
-    const stats = this.getSystemStats();
-    console.log('📊 System stats after maintenance:', stats);
   }
 
   clearAllCaches() {
@@ -557,9 +542,8 @@ class BotWebSocket {
     });
 
     this.ws.on("open", () => {
-      console.log(`✅ Successfully connected to ${uri}`);
-      console.log("🤖 AI Bot is now listening for questions and commands...");
-      console.log("📊 System stats:", JSON.stringify(botCoordinator.getSystemStats(), null, 2));
+      console.log(`✅ Bot connected to Whop`);
+      console.log(`🤖 Listening for messages and commands...`);
       
       this.reconnectAttempts = 0;
       
@@ -660,17 +644,13 @@ const botWebSocket = new BotWebSocket();
 
 // Main export function
 export async function startBot() {
-  console.log('🚀 Starting Whop AI Bot...');
-  console.log('📝 Bot features:');
-  console.log('   • Company-level configuration (not per-experience)');
-  console.log('   • AI-powered question answering');
-  console.log('   • !help and !refresh commands');
-  console.log('   • Admin-only configuration access');
-  console.log('   • Rate limiting and deduplication');
-  console.log('   • Automatic maintenance and cleanup');
-  console.log('   • Improved cache management (30s TTL)');
-  console.log('   • Better company mapping retry logic');
-  console.log('');
+  console.log('🚀 Starting Whop AI Bot...\n');
+  console.log('Features:');
+  console.log('  • Smart AI question detection');
+  console.log('  • Admin-only configuration');
+  console.log('  • Real-time responses');
+  console.log('  • Rate limiting & caching');
+  console.log('  • Bot commands (!help, !refresh)\n');
   
   await botWebSocket.start();
 }

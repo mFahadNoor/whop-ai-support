@@ -167,6 +167,13 @@ export class DataManager {
     setInterval(() => {
       this.cleanupExpiredCache();
     }, 2 * 60 * 1000); // Clean up every 2 minutes
+    
+    // Load existing experience mappings from database on startup
+    this.loadExperienceMappingsFromDB().catch(error => {
+      logger.error('Failed to load experience mappings on startup', error, {
+        action: 'startup_mapping_load_failed'
+      });
+    });
   }
 
   setExperienceMappedCallback(callback: (experienceId: string) => void) {
@@ -178,7 +185,7 @@ export class DataManager {
     
     if (existingCompanyId !== companyId) {
       this.experienceToCompanyMap.set(experienceId, companyId);
-      console.log(`🔗 Mapped experience ${experienceId} to company ${companyId}`);
+      console.log(`🔗 Mapped experience to ${companyId.substring(0, 8)}...`);
       
       // Store mapping in database for persistence
       this.saveMappingToDB(experienceId, companyId).catch(error => {
@@ -202,8 +209,21 @@ export class DataManager {
 
   async tryFetchMappingFromDB(experienceId: string): Promise<string | null> {
     try {
-      // For now, return null since we don't have experience mapping in DB schema
-      // This will be handled by the in-memory mapping
+      const mapping = await prisma.experienceMapping.findUnique({
+        where: { experienceId }
+      });
+      
+      if (mapping) {
+        // Cache the mapping in memory
+        this.experienceToCompanyMap.set(experienceId, mapping.companyId);
+        logger.info('Loaded experience mapping from database', {
+          experienceId,
+          companyId: mapping.companyId,
+          action: 'mapping_loaded_from_db'
+        });
+        return mapping.companyId;
+      }
+      
       return null;
     } catch (error) {
       logger.error('Failed to fetch mapping from database', error as Error, { experienceId });
@@ -211,8 +231,47 @@ export class DataManager {
     }
   }
 
+  private async loadExperienceMappingsFromDB(): Promise<void> {
+    try {
+      const mappings = await prisma.experienceMapping.findMany();
+      let loadedCount = 0;
+      
+      for (const mapping of mappings) {
+        this.experienceToCompanyMap.set(mapping.experienceId, mapping.companyId);
+        loadedCount++;
+      }
+      
+      if (loadedCount > 0) {
+        console.log(`🔗 Loaded ${loadedCount} experience mapping(s)`);
+      }
+      
+      logger.info('Loaded experience mappings from database on startup', {
+        loadedCount,
+        action: 'startup_mappings_loaded'
+      });
+    } catch (error) {
+      logger.error('Failed to load experience mappings from database', error as Error, {
+        action: 'startup_mappings_failed'
+      });
+    }
+  }
+
   private async saveMappingToDB(experienceId: string, companyId: string) {
     try {
+      // Save the experience mapping
+      await prisma.experienceMapping.upsert({
+        where: { experienceId },
+        update: {
+          companyId,
+          updatedAt: new Date()
+        },
+        create: {
+          experienceId,
+          companyId
+        }
+      });
+      
+      // Also ensure the company exists
       await prisma.company.upsert({
         where: { id: companyId },
         update: {
@@ -223,6 +282,12 @@ export class DataManager {
           name: `Company ${companyId}`,
           config: {}
         }
+      });
+      
+      logger.info('Saved experience mapping to database', {
+        experienceId,
+        companyId,
+        action: 'mapping_saved_to_db'
       });
     } catch (error) {
       logger.error('Failed to save experience mapping', error as Error, { experienceId, companyId });

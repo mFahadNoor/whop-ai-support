@@ -24,3 +24,13 @@ model Company {
   @@index([createdAt])
   @@map("companies")
 }
+
+model ExperienceMapping {
+  experienceId String   @id @db.VarChar(255) // Whop experience ID
+  companyId    String   @db.VarChar(255)     // Whop company ID
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  @@index([companyId])
+  @@map("experience_mappings")
+}
