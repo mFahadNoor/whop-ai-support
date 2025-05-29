@@ -1,18 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { hasAccess } from '@whop-apps/sdk';
+import { verifyUserToken, whopApi } from "@/lib/whop-api";
 import { headers } from 'next/headers';
 import { dataManager, isValidBotSettings } from '@/lib/data-manager';
-import { BotSettings } from '@/lib/shared-utils';
 
-// Helper function to check if user is authorized admin for the company
+
+// Helper function to check if user has admin access to the company
 async function checkAdminAccess(companyId: string): Promise<boolean> {
   try {
     const headersList = await headers();
-    const access = await hasAccess({ 
-      to: `authorized-${companyId}`, 
-      headers: headersList 
+    const userToken = await verifyUserToken(headersList);
+    
+    if (!userToken) {
+      console.log('❌ No user token found');
+      return false;
+    }
+
+    console.log(`🔍 Checking admin access for user ${userToken.userId} to company ${companyId}`);
+
+    // Check if user has admin access to the company
+    const hasAccess = await whopApi.checkIfUserHasAccessToCompany({
+      userId: userToken.userId,
+      companyId,
     });
-    return access;
+
+    console.log(`🔍 Access check result:`, hasAccess);
+
+    if (hasAccess.hasAccessToCompany.accessLevel === "admin" || hasAccess.hasAccessToCompany.accessLevel === "owner") {
+      console.log(`✅ User has ${hasAccess.hasAccessToCompany.accessLevel} access to company ${companyId}`);
+      return true;
+    }
+
+    console.log(`❌ User has insufficient access level: ${hasAccess.hasAccessToCompany.accessLevel}`);
+    return false;
   } catch (error) {
     console.error('Error checking admin access:', error);
     return false;
@@ -39,7 +58,7 @@ export async function GET(
   try {
     const { companyId } = await params;
     
-    // Check if user is authorized admin for this company
+    // Check if user has admin access to this company
     const hasAdminAccess = await checkAdminAccess(companyId);
     if (!hasAdminAccess) {
       return NextResponse.json(
@@ -68,7 +87,7 @@ export async function POST(
   try {
     const { companyId } = await params;
     
-    // Check if user is authorized admin for this company
+    // Check if user has admin access to this company
     const hasAdminAccess = await checkAdminAccess(companyId);
     if (!hasAdminAccess) {
       return NextResponse.json(
@@ -109,7 +128,7 @@ export async function DELETE(
   try {
     const { companyId } = await params;
     
-    // Check if user is authorized admin for this company
+    // Check if user has admin access to this company
     const hasAdminAccess = await checkAdminAccess(companyId);
     if (!hasAdminAccess) {
       return NextResponse.json(

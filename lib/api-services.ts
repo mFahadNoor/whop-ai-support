@@ -1,4 +1,45 @@
-import { config, logger, retry, sleep } from './shared-utils';
+/**
+ * API Services - Whop Platform Integration
+ * 
+ * This module provides all the services needed to interact with the Whop platform.
+ * It handles WebSocket communication, message sending, webhook processing,
+ * and user authentication with built-in rate limiting and error handling.
+ * 
+ * Key Features:
+ * - Real-time WebSocket connection to Whop's messaging system
+ * - Intelligent message sending with rate limiting and deduplication
+ * - Webhook validation and processing for platform events
+ * - User authentication and permission verification
+ * - Automatic retry logic for failed API calls
+ * - Comprehensive error handling and logging
+ * 
+ * Services Included:
+ * - WhopAPIService: Core API interactions and message sending
+ * - WebhookService: Webhook validation and event processing
+ * 
+ * Rate Limiting:
+ * - Message sending: 30 per minute per feed
+ * - Automatic cleanup of expired rate limits
+ * - Memory-efficient tracking with Map-based storage
+ * 
+ * Error Handling:
+ * - Automatic retries with exponential backoff
+ * - Detailed error logging with context
+ * - Graceful degradation when services are unavailable
+ * 
+ * Usage:
+ * ```typescript
+ * // Send a message
+ * await whopAPI.sendMessage('feed_123', 'Hello world!');
+ * 
+ * // Process a webhook
+ * const isValid = await webhookService.validateAndProcess(request);
+ * ```
+ */
+
+import { makeWebhookValidator } from '@whop/api';
+import WebSocket from 'ws';
+import { config, logger, ProcessedMessage, retry, sleep } from './shared-utils';
 
 // =============================================================================
 // WHOP API WRAPPER
@@ -50,25 +91,49 @@ class WhopAPIService {
         logger.warn('Message truncated due to length', { feedId, originalLength: content.length });
       }
 
-      // Send message with retry logic
+      // Use GraphQL mutation for sending messages
       const success = await retry(async () => {
-        const response = await fetch(`${this.baseURL}/posts`, {
+        const query = `mutation sendMessage($input: SendMessageInput!) {
+          sendMessage(input: $input)
+        }`;
+
+        const payload = {
+          query: query,
+          variables: {
+            input: {
+              feedId: feedId,
+              feedType: "chat_feed", // Assuming this is a chat feed, adjust if needed
+              message: content.trim()
+            }
+          }
+        };
+
+        const response = await fetch('https://api.whop.com/public-graphql', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            feed_id: feedId,
-            content: content.trim(),
-          }),
+          body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
         }
 
-        return true;
+        const result = await response.json();
+        
+        if (result.errors) {
+          throw new Error(`GraphQL Error: ${JSON.stringify(result.errors)}`);
+        }
+
+        if (result.data?.sendMessage) {
+          logger.debug('Message sent successfully via GraphQL', { feedId, messageId: result.data.sendMessage });
+          return true;
+        } else {
+          throw new Error('No data returned from sendMessage mutation');
+        }
       }, config.MAX_RETRIES, config.RETRY_DELAY_MS);
 
       if (success) {

@@ -7,7 +7,7 @@ import { Bot, Settings, Zap, Brain, MessageSquare, Plus, Trash2, Edit3, Save, X,
 interface BotSettings {
   enabled: boolean;
   knowledgeBase: string;
-  personality: string;
+  botPersonality?: string;
   customInstructions: string;
   presetQA: Array<{
     id: string;
@@ -159,7 +159,7 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
   const [settings, setSettings] = useState<BotSettings>({
     enabled: false,
     knowledgeBase: '',
-    personality: '',
+    botPersonality: '',
     customInstructions: '',
     presetQA: [],
     responseStyle: 'professional',
@@ -471,8 +471,8 @@ export default function CompanyPage({ params }: { params: Promise<{ companyId: s
                     <div>
                       <label className="text-white text-sm block mb-2">Personality Description</label>
                       <textarea
-                        value={settings.personality}
-                        onChange={(e) => setSettings({...settings, personality: e.target.value})}
+                        value={settings.botPersonality}
+                        onChange={(e) => setSettings({...settings, botPersonality: e.target.value})}
                         placeholder="e.g., You are a helpful gaming expert who loves competitive FPS games. You're enthusiastic but professional, and you always provide actionable advice..."
                         rows={4}
                         className="w-full bg-black/50 border border-white/20 rounded-lg p-3 text-white placeholder-zinc-500 resize-none focus:outline-none focus:border-white/40"

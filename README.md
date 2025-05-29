@@ -140,7 +140,7 @@ OPENROUTER_API_KEY="your_api_key"
 OPENROUTER_MODEL="anthropic/claude-3.5-sonnet"
 
 # Whop Integration
-WHOP_API_KEY="your_whop_api_key"
+WHOP_APP_API_KEY="your_WHOP_APP_API_KEY"
 WHOP_AGENT_USER_ID="your_bot_user_id"
 ```
 

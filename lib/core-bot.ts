@@ -1,3 +1,43 @@
+/**
+ * Core Bot - Main Bot Service and Orchestration
+ * 
+ * This is the main entry point for the Whop AI bot service. It orchestrates
+ * all the different components and provides the core bot functionality including
+ * WebSocket connection management, message processing, and bot commands.
+ * 
+ * Key Features:
+ * - WebSocket connection to Whop with automatic reconnection
+ * - Real-time message processing and AI response generation
+ * - Bot command handling (!help, !refresh)
+ * - Multi-tenant support for multiple companies/experiences
+ * - Graceful shutdown and error recovery
+ * - Health monitoring and maintenance tasks
+ * 
+ * Architecture:
+ * - Uses WebSocket for real-time communication with Whop
+ * - Integrates DataManager for settings and caching
+ * - Uses AIEngine for intelligent response generation
+ * - Leverages WhopAPI for sending messages and API calls
+ * 
+ * Bot Commands:
+ * - `!help` - Shows available commands and bot information
+ * - `!refresh` - Reloads bot configuration and clears cache
+ * 
+ * Message Processing Flow:
+ * 1. Receive message from WebSocket
+ * 2. Parse and validate message structure
+ * 3. Check if company has bot enabled
+ * 4. Process message through AI engine
+ * 5. Send response if needed
+ * 6. Handle any errors gracefully
+ * 
+ * Usage:
+ * ```bash
+ * # Start the bot service
+ * npm run bot
+ * ```
+ */
+
 import dotenv from 'dotenv';
 dotenv.config();
 

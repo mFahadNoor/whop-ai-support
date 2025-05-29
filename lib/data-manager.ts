@@ -1,3 +1,31 @@
+/**
+ * Data Manager - Database Operations and Caching
+ * 
+ * This module handles all database operations and caching for the AI bot.
+ * It provides a high-level interface for managing company settings, experience mappings,
+ * and bot configurations with built-in caching for optimal performance.
+ * 
+ * Key Features:
+ * - Company settings management with automatic caching
+ * - Experience-to-company mapping for multi-tenant support
+ * - Intelligent cache invalidation and refresh strategies
+ * - Database connection management with Prisma ORM
+ * - Error handling and retry logic for database operations
+ * - Memory-efficient caching with TTL (Time To Live) support
+ * 
+ * Caching Strategy:
+ * - Settings are cached for 5 minutes by default
+ * - Cache is automatically invalidated when settings are updated
+ * - Experience mappings are cached until explicitly refreshed
+ * - Least Recently Used (LRU) eviction when cache size limits are reached
+ * 
+ * Usage:
+ * ```typescript
+ * const settings = await dataManager.getCompanySettings('company_123');
+ * await dataManager.updateCompanySettings('company_123', newSettings);
+ * ```
+ */
+
 import { PrismaClient } from '@prisma/client';
 import { BotSettings, config, logger, validateString, sanitizeText } from './shared-utils';
 
@@ -71,13 +99,23 @@ export function isValidBotSettings(settings: any): boolean {
 }
 
 export function validateBotSettings(settings: Partial<BotSettings>): void {
-  // Basic validation
+  // Basic validation - allow empty strings for optional fields
   if (settings.knowledgeBase !== undefined) {
-    validateString(settings.knowledgeBase, 'knowledgeBase', config.MAX_KNOWLEDGE_BASE_SIZE);
+    if (typeof settings.knowledgeBase !== 'string') {
+      throw new Error('knowledgeBase must be a string');
+    }
+    if (settings.knowledgeBase.length > config.MAX_KNOWLEDGE_BASE_SIZE) {
+      throw new Error(`knowledgeBase cannot exceed ${config.MAX_KNOWLEDGE_BASE_SIZE} characters`);
+    }
   }
 
   if (settings.customInstructions !== undefined) {
-    validateString(settings.customInstructions, 'customInstructions', 10000);
+    if (typeof settings.customInstructions !== 'string') {
+      throw new Error('customInstructions must be a string');
+    }
+    if (settings.customInstructions.length > 10000) {
+      throw new Error('customInstructions cannot exceed 10000 characters');
+    }
   }
 
   if (settings.responseStyle !== undefined) {

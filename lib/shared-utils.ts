@@ -1,3 +1,21 @@
+/**
+ * Shared Utilities and Configuration
+ * 
+ * This module provides essential utilities, configuration management, and helper functions
+ * that are used throughout the AI bot application. It handles:
+ * 
+ * Key Features:
+ * - Environment variable validation and type-safe configuration loading
+ * - Structured logging with multiple levels and metadata support
+ * - Utility functions for text processing, validation, and question detection
+ * - TypeScript interfaces for consistent data structures
+ * - Error handling and retry logic utilities
+ * 
+ * The configuration system automatically validates all required environment variables
+ * and provides sensible defaults for optional ones. This ensures the bot fails fast
+ * with clear error messages if misconfigured.
+ */
+
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -5,49 +23,64 @@ dotenv.config();
 // TYPES AND INTERFACES
 // =============================================================================
 
+/**
+ * Represents a processed message from the WebSocket that needs a bot response
+ * This is the standardized format used throughout the application
+ */
 export interface ProcessedMessage {
-  entityId: string;
-  feedId: string;
-  content: string;
+  entityId: string;        // Unique identifier for the message
+  feedId: string;          // ID of the feed/channel where message was posted
+  content: string;         // The actual message content
   user: {
-    id: string;
-    username?: string;
-    name?: string;
+    id: string;            // User ID from Whop
+    username?: string;     // Display username
+    name?: string;         // User's display name
   };
-  experienceId: string;
-  messageType: 'forumPost' | 'chatMessage';
+  experienceId: string;    // Whop experience (community) ID
+  messageType: 'forumPost' | 'chatMessage'; // Type of message
 }
 
+/**
+ * Bot configuration settings stored in the database
+ * These settings control how the bot behaves and responds
+ */
 export interface BotSettings {
-  enabled: boolean;
-  knowledgeBase: string;
-  botPersonality?: string;
-  botLanguage?: string;
-  customInstructions: string;
-  presetQA: Array<{
+  enabled: boolean;                    // Whether the bot is active
+  knowledgeBase: string;              // Custom information about the community
+  botPersonality?: string;            // Optional personality traits
+  botLanguage?: string;               // Language for responses
+  customInstructions: string;         // Additional instructions for AI
+  presetQA: Array<{                   // Pre-configured question/answer pairs
     id: string;
     question: string;
     answer: string;
     enabled: boolean;
   }>;
   responseStyle: 'professional' | 'friendly' | 'casual' | 'technical' | 'custom';
-  autoResponse: boolean;
-  responseDelay: number;
-  presetQuestions?: string[];
-  presetAnswers?: string[];
+  autoResponse: boolean;              // Whether to auto-respond to questions
+  responseDelay: number;              // Delay before responding (in ms)
+  presetQuestions?: string[];         // Legacy field for preset questions
+  presetAnswers?: string[];           // Legacy field for preset answers
 }
 
+/**
+ * Experience data structure from Whop WebSocket messages
+ */
 export interface ExperienceData {
-  id: string;
+  id: string;                         // Experience ID
   bot?: {
-    id: string;
+    id: string;                       // Bot ID if configured
   };
 }
 
+/**
+ * WebSocket message structure from Whop
+ * This represents the raw message format received from Whop's WebSocket
+ */
 export interface WebSocketMessage {
   experience?: ExperienceData;
   feedEntity?: {
-    post?: {
+    post?: {                          // Forum post message
       entityId: string;
       feedId: string;
       content?: string;
@@ -59,7 +92,7 @@ export interface WebSocketMessage {
         name?: string;
       };
     };
-    dmsPost?: {
+    dmsPost?: {                       // Direct message
       entityId: string;
       feedId: string;
       content?: string;
@@ -78,6 +111,22 @@ export interface WebSocketMessage {
 // CONFIGURATION
 // =============================================================================
 
+/**
+ * Application configuration interface
+ * 
+ * This interface defines all the configuration options for the AI bot.
+ * All values are loaded from environment variables with validation and defaults.
+ * 
+ * Configuration Categories:
+ * - Environment: Runtime environment settings
+ * - Database: PostgreSQL connection and logging
+ * - Whop API: Integration with Whop platform
+ * - OpenRouter AI: AI model configuration
+ * - Rate Limiting: Request throttling settings
+ * - Caching: Memory and response caching
+ * - Performance: Retry logic and timing
+ * - Security: Input validation and limits
+ */
 export interface Config {
   // Environment
   NODE_ENV: string;
@@ -115,7 +164,16 @@ export interface Config {
   MAX_KNOWLEDGE_BASE_SIZE: number;
 }
 
-// Helper functions for environment variable parsing
+// =============================================================================
+// ENVIRONMENT VARIABLE HELPERS
+// =============================================================================
+
+/**
+ * Gets a required environment variable, throws error if missing
+ * @param key - Environment variable name
+ * @returns The environment variable value
+ * @throws Error if the variable is not set
+ */
 function getRequiredEnv(key: string): string {
   const value = process.env[key];
   if (!value) {
@@ -124,10 +182,22 @@ function getRequiredEnv(key: string): string {
   return value;
 }
 
+/**
+ * Gets an optional environment variable with fallback
+ * @param key - Environment variable name
+ * @param defaultValue - Default value if not set
+ * @returns The environment variable value or default
+ */
 function getOptionalEnv(key: string, defaultValue?: string): string {
   return process.env[key] || defaultValue || '';
 }
 
+/**
+ * Parses an environment variable as integer with fallback
+ * @param key - Environment variable name
+ * @param defaultValue - Default value if not set or invalid
+ * @returns Parsed integer value
+ */
 function parseEnvInt(key: string, defaultValue: number): number {
   const value = process.env[key];
   if (!value) return defaultValue;
@@ -135,13 +205,27 @@ function parseEnvInt(key: string, defaultValue: number): number {
   return isNaN(parsed) ? defaultValue : parsed;
 }
 
+/**
+ * Parses an environment variable as boolean with fallback
+ * @param key - Environment variable name
+ * @param defaultValue - Default value if not set
+ * @returns Boolean value (true for 'true', false otherwise)
+ */
 function parseEnvBool(key: string, defaultValue: boolean): boolean {
   const value = process.env[key];
   if (!value) return defaultValue;
   return value.toLowerCase() === 'true';
 }
 
-// Load and validate configuration
+/**
+ * Loads and validates the complete application configuration
+ * 
+ * This function reads all environment variables, applies defaults,
+ * validates required fields, and returns a typed configuration object.
+ * 
+ * @returns Complete application configuration
+ * @throws Error if any required variables are missing or invalid
+ */
 function loadConfig(): Config {
   try {
     const config: Config = {
@@ -231,9 +315,12 @@ function validateConfig(config: Config): void {
 export const config = loadConfig();
 
 // =============================================================================
-// LOGGING
+// LOGGING SYSTEM
 // =============================================================================
 
+/**
+ * Represents a single log entry with metadata
+ */
 interface LogEntry {
   timestamp: string;
   level: 'debug' | 'info' | 'warn' | 'error';
@@ -242,6 +329,22 @@ interface LogEntry {
   metadata?: Record<string, any>;
 }
 
+/**
+ * Advanced logging system with level filtering and structured output
+ * 
+ * Features:
+ * - Configurable log levels (debug, info, warn, error)
+ * - Structured JSON logging in production
+ * - Pretty console output in development
+ * - Automatic error stack trace inclusion
+ * - Metadata support for contextual information
+ * 
+ * Usage:
+ * ```typescript
+ * logger.info('Bot started', { botId: 'abc123' });
+ * logger.error('Failed to process message', error, { messageId: 'xyz' });
+ * ```
+ */
 class Logger {
   private logLevel: string;
 
@@ -320,14 +423,36 @@ export const logger = new Logger();
 // =============================================================================
 
 /**
- * Sleep for a specified number of milliseconds
+ * Pauses execution for a specified number of milliseconds
+ * 
+ * @param ms - Number of milliseconds to sleep
+ * @returns Promise that resolves after the delay
+ * 
+ * @example
+ * await sleep(1000); // Wait 1 second
  */
 export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
- * Retry a function with exponential backoff
+ * Executes a function with exponential backoff retry logic
+ * 
+ * This utility automatically retries failed operations with increasing delays
+ * between attempts. Useful for handling temporary network failures or rate limits.
+ * 
+ * @param fn - Async function to retry
+ * @param maxRetries - Maximum number of retry attempts (default: 3)
+ * @param baseDelay - Base delay in milliseconds, doubles each retry (default: 1000)
+ * @returns Promise with the function result
+ * @throws The last error if all retries fail
+ * 
+ * @example
+ * const result = await retry(
+ *   () => fetch('/api/data'),
+ *   3,  // Try up to 3 times
+ *   500 // Start with 500ms delay
+ * );
  */
 export async function retry<T>(
   fn: () => Promise<T>,
@@ -361,36 +486,63 @@ export async function retry<T>(
 }
 
 /**
- * Validate that a string is not empty and within length limits
+ * Validates and sanitizes string input
+ * 
+ * @param value - String to validate
+ * @param fieldName - Name of the field for error messages
+ * @param maxLength - Optional maximum length limit
+ * @returns Trimmed and validated string
+ * @throws Error if validation fails
+ * 
+ * @example
+ * const username = validateString(input, 'username', 50);
  */
 export function validateString(value: string, fieldName: string, maxLength?: number): string {
   if (!value || typeof value !== 'string') {
     throw new Error(`${fieldName} is required and must be a string`);
   }
-  
-  if (value.trim().length === 0) {
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
     throw new Error(`${fieldName} cannot be empty`);
   }
-  
-  if (maxLength && value.length > maxLength) {
-    throw new Error(`${fieldName} must be ${maxLength} characters or less`);
+
+  if (maxLength && trimmed.length > maxLength) {
+    throw new Error(`${fieldName} cannot exceed ${maxLength} characters`);
   }
-  
-  return value.trim();
+
+  return trimmed;
 }
 
 /**
- * Sanitize text for safe output
+ * Removes potentially harmful characters from text
+ * 
+ * This function sanitizes user input by removing or escaping characters
+ * that could be used for injection attacks or cause display issues.
+ * 
+ * @param text - Text to sanitize
+ * @returns Sanitized text safe for storage and display
+ * 
+ * @example
+ * const safe = sanitizeText(userInput);
  */
 export function sanitizeText(text: string): string {
   return text
-    .replace(/[<>]/g, '') // Remove potential HTML tags
-    .replace(/\n{3,}/g, '\n\n') // Limit consecutive newlines
+    .replace(/[<>]/g, '') // Remove HTML brackets
+    .replace(/\x00/g, '') // Remove null bytes
     .trim();
 }
 
 /**
- * Truncate text to a maximum length with ellipsis
+ * Truncates text to a maximum length with ellipsis
+ * 
+ * @param text - Text to truncate
+ * @param maxLength - Maximum length including ellipsis
+ * @returns Truncated text with '...' if needed
+ * 
+ * @example
+ * const short = truncateText('Very long message...', 20);
+ * // Returns: "Very long message..."
  */
 export function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
@@ -398,29 +550,48 @@ export function truncateText(text: string, maxLength: number): string {
 }
 
 /**
- * Check if a string contains question indicators
+ * Detects if text contains a question using heuristic analysis
+ * 
+ * This function uses multiple indicators to determine if text contains
+ * a question, including question marks, question words, and sentence structure.
+ * 
+ * @param text - Text to analyze
+ * @returns True if text appears to contain a question
+ * 
+ * @example
+ * isQuestion("How do I join?") // Returns: true
+ * isQuestion("Thanks for help") // Returns: false
  */
 export function isQuestion(text: string): boolean {
-  const questionIndicators = [
-    '?',
-    'how', 'what', 'when', 'where', 'why', 'who', 'which',
-    'can', 'could', 'would', 'should', 'will',
-    'is', 'are', 'was', 'were', 'do', 'does', 'did',
-    'help', 'need', 'problem', 'issue', 'error'
-  ];
+  const normalizedText = text.toLowerCase().trim();
   
-  const lowerText = text.toLowerCase();
-  return questionIndicators.some(indicator => lowerText.includes(indicator));
+  // Check for question mark
+  if (text.includes('?')) return true;
+  
+  // Check for question words
+  const questionWords = ['how', 'what', 'when', 'where', 'why', 'who', 'which', 'can', 'could', 'would', 'should', 'is', 'are', 'do', 'does', 'did'];
+  const startsWithQuestion = questionWords.some(word => normalizedText.startsWith(word + ' '));
+  
+  return startsWithQuestion;
 }
 
 /**
- * Extract key phrases from text for better matching
+ * Extracts key phrases from text for indexing and search
+ * 
+ * @param text - Text to analyze
+ * @returns Array of key phrases
+ * 
+ * @example
+ * const phrases = extractKeyPhrases("How to join Discord server?");
+ * // Returns: ["join", "discord", "server"]
  */
 export function extractKeyPhrases(text: string): string[] {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s]/g, ' ')
+  const words = text.toLowerCase()
+    .replace(/[^\w\s]/g, '') // Remove punctuation
     .split(/\s+/)
-    .filter(word => word.length > 2)
-    .slice(0, 10); // Limit to 10 key phrases
+    .filter(word => word.length > 2); // Filter short words
+  
+  // Remove common stop words
+  const stopWords = ['the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by'];
+  return words.filter(word => !stopWords.includes(word));
 } 

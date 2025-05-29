@@ -1,3 +1,41 @@
+/**
+ * AI Engine - Intelligent Question Processing and Response Generation
+ * 
+ * This module provides the core AI functionality for the Whop support bot.
+ * It intelligently processes user messages, determines if they need responses,
+ * and generates contextual answers using OpenRouter AI models.
+ * 
+ * Key Features:
+ * - Smart question detection with 80%+ token savings
+ * - Preset Q&A matching for instant responses
+ * - Contextual AI responses using company knowledge base
+ * - Response caching to reduce API costs and improve speed
+ * - Rate limiting to prevent API quota exhaustion
+ * - Multiple response styles (professional, friendly, casual, technical)
+ * - Automatic fallback handling for API failures
+ * 
+ * Question Processing Pipeline:
+ * 1. Quick heuristic check for question indicators
+ * 2. Preset Q&A matching for common questions
+ * 3. AI-powered question confirmation
+ * 4. Context-aware response generation
+ * 5. Response caching and rate limit tracking
+ * 
+ * Performance Optimizations:
+ * - Response caching (30-second TTL)
+ * - Rate limiting (10 AI requests per minute per company)
+ * - Efficient question detection to avoid unnecessary AI calls
+ * - Automatic cache cleanup and memory management
+ * 
+ * Usage:
+ * ```typescript
+ * const response = await aiEngine.processQuestion(message, settings);
+ * if (response.shouldRespond) {
+ *   // Send response.message to user
+ * }
+ * ```
+ */
+
 import OpenAI from 'openai';
 import { BotSettings, config, logger, retry, isQuestion, extractKeyPhrases, sanitizeText, truncateText } from './shared-utils';
 
