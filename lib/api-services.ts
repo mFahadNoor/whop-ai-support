@@ -234,6 +234,31 @@ class WhopAPIService {
   }
 
   /**
+   * Get all experiences for this app (for discovering mappings)
+   */
+  async getAppExperiences(): Promise<Array<{id: string, company_id: string}> | null> {
+    try {
+      const response = await retry(async () => {
+        return await fetch('https://api.whop.com/v5/app/experiences', {
+          headers: {
+            'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
+          },
+        });
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.data || [];
+    } catch (error) {
+      logger.error('Failed to fetch app experiences', error as Error);
+      return null;
+    }
+  }
+
+  /**
    * Get user information
    */
   async getUser(userId: string): Promise<any> {

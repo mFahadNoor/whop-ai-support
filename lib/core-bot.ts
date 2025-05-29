@@ -298,10 +298,55 @@ class BotCoordinator {
     let companyId = dataManager.getCompanyId(experienceId);
     
     if (!companyId) {
-      console.log(`🔄 No mapping found for experience ${experienceId}, checking with Whop API...`);
+      console.log(`🔄 No mapping found for experience ${experienceId}, checking database...`);
       companyId = await dataManager.tryFetchMappingFromDB(experienceId);
-    if (!companyId) {
-        console.log(`❌ No mapping found for experience ${experienceId}`);
+      
+      if (!companyId) {
+        // Buffer the message for later processing when mapping arrives
+        if (!this.pendingMessages.has(experienceId)) {
+          this.pendingMessages.set(experienceId, []);
+        }
+        
+        const pendingMessages = this.pendingMessages.get(experienceId)!;
+        pendingMessages.push(message);
+        
+        // Limit pending messages per experience to prevent memory issues
+        if (pendingMessages.length > 50) {
+          pendingMessages.shift(); // Remove oldest message
+        }
+        
+        const retryCount = this.retryCount.get(experienceId) || 0;
+        
+        if (retryCount < this.MAX_PENDING_RETRIES) {
+          this.retryCount.set(experienceId, retryCount + 1);
+          
+          const delay = Math.min(
+            this.INITIAL_RETRY_DELAY * Math.pow(2, retryCount),
+            this.MAX_RETRY_DELAY
+          );
+          
+          console.log(`📦 Buffered message for experience ${experienceId} (${pendingMessages.length} pending, retry ${retryCount + 1}/${this.MAX_PENDING_RETRIES})`);
+          
+          // Retry after delay
+          setTimeout(async () => {
+            const currentCompanyId = dataManager.getCompanyId(experienceId);
+            if (currentCompanyId) {
+              // Mapping found, process pending messages
+              await this.processPendingMessages(experienceId);
+            } else {
+              // Still no mapping, try fetching from DB again
+              const dbCompanyId = await dataManager.tryFetchMappingFromDB(experienceId);
+              if (dbCompanyId) {
+                await this.processPendingMessages(experienceId);
+              }
+            }
+          }, delay);
+        } else {
+          console.log(`❌ Max retries reached for experience ${experienceId}, dropping ${pendingMessages.length} messages`);
+          this.pendingMessages.delete(experienceId);
+          this.retryCount.delete(experienceId);
+        }
+        
         return;
       }
     }

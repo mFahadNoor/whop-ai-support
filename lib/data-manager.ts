@@ -168,10 +168,26 @@ export class DataManager {
       this.cleanupExpiredCache();
     }, 2 * 60 * 1000); // Clean up every 2 minutes
     
+    // Set up periodic mapping discovery (every 5 minutes)
+    setInterval(() => {
+      this.discoverMissingMappings().catch(error => {
+        logger.error('Failed to discover missing mappings during periodic check', error, {
+          action: 'periodic_mapping_discovery_failed'
+        });
+      });
+    }, 5 * 60 * 1000); // Check every 5 minutes
+    
     // Load existing experience mappings from database on startup
     this.loadExperienceMappingsFromDB().catch(error => {
       logger.error('Failed to load experience mappings on startup', error, {
         action: 'startup_mapping_load_failed'
+      });
+    }).then(() => {
+      // After loading from DB, discover any missing mappings from Whop API
+      this.discoverMissingMappings().catch(error => {
+        logger.error('Failed to discover missing mappings on startup', error, {
+          action: 'startup_mapping_discovery_failed'
+        });
       });
     });
   }
@@ -291,6 +307,70 @@ export class DataManager {
       });
     } catch (error) {
       logger.error('Failed to save experience mapping', error as Error, { experienceId, companyId });
+    }
+  }
+
+  /**
+   * Discover missing experience mappings by fetching from Whop API
+   */
+  async discoverMissingMappings(): Promise<void> {
+    try {
+      console.log('🔍 Discovering experience mappings from Whop API...');
+      
+      const { whopAPI } = await import('./api-services');
+      const experiences = await whopAPI.getAppExperiences();
+      
+      if (!experiences) {
+        logger.warn('Failed to fetch app experiences for mapping discovery');
+        return;
+      }
+      
+      let discoveredCount = 0;
+      let newMappings = 0;
+      
+      for (const experience of experiences) {
+        if (experience.id && experience.company_id) {
+          discoveredCount++;
+          
+          // Check if we already have this mapping
+          const existingMapping = this.experienceToCompanyMap.get(experience.id);
+          
+          if (!existingMapping) {
+            // New mapping discovered
+            this.registerExperience(experience.id, experience.company_id);
+            newMappings++;
+          } else if (existingMapping !== experience.company_id) {
+            // Mapping changed
+            logger.info('Experience mapping changed', {
+              experienceId: experience.id,
+              oldCompanyId: existingMapping,
+              newCompanyId: experience.company_id,
+              action: 'mapping_updated'
+            });
+            this.registerExperience(experience.id, experience.company_id);
+            newMappings++;
+          }
+        }
+      }
+      
+      if (newMappings > 0) {
+        console.log(`✅ Discovered ${newMappings} new experience mapping(s) from ${discoveredCount} total experiences`);
+      } else if (discoveredCount > 0) {
+        console.log(`✅ All ${discoveredCount} experience mappings are up to date`);
+      } else {
+        console.log('ℹ️ No experiences found for this app');
+      }
+      
+      logger.info('Completed mapping discovery', {
+        totalExperiences: discoveredCount,
+        newMappings,
+        action: 'mapping_discovery_completed'
+      });
+      
+    } catch (error) {
+      logger.error('Failed to discover experience mappings', error as Error, {
+        action: 'mapping_discovery_failed'
+      });
     }
   }
 
