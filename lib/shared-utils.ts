@@ -38,6 +38,7 @@ export interface ProcessedMessage {
   };
   experienceId: string;    // Whop experience (community) ID
   messageType: 'forumPost' | 'chatMessage'; // Type of message
+  replyingToPostId?: string; // ID of the post this message is replying to
 }
 
 /**
@@ -148,8 +149,7 @@ interface AppConfig {
   AI_RATE_LIMIT_PER_MINUTE: number;
   MESSAGE_RATE_LIMIT_PER_MINUTE: number;
   
-  // Caching & Performance
-  CACHE_TTL_MINUTES: number;
+  // Performance
   MAX_MEMORY_CACHE_SIZE: number;
   
   // Security & Validation
@@ -249,8 +249,7 @@ function loadConfig(): AppConfig {
       AI_RATE_LIMIT_PER_MINUTE: parseEnvInt('AI_RATE_LIMIT_PER_MINUTE', 10),
       MESSAGE_RATE_LIMIT_PER_MINUTE: parseEnvInt('MESSAGE_RATE_LIMIT_PER_MINUTE', 30),
       
-      // Caching
-      CACHE_TTL_MINUTES: parseEnvInt('CACHE_TTL_MINUTES', 5),
+      // Performance
       MAX_MEMORY_CACHE_SIZE: parseEnvInt('MAX_MEMORY_CACHE_SIZE', 1000),
       
       // Security
@@ -303,8 +302,8 @@ function validateConfig(config: AppConfig): void {
     errors.push('MESSAGE_RATE_LIMIT_PER_MINUTE must be between 1 and 1000');
   }
   
-  if (config.CACHE_TTL_MINUTES < 1 || config.CACHE_TTL_MINUTES > 1440) {
-    errors.push('CACHE_TTL_MINUTES must be between 1 and 1440 (24 hours)');
+  if (config.MAX_MEMORY_CACHE_SIZE < 1 || config.MAX_MEMORY_CACHE_SIZE > 1000) {
+    errors.push('MAX_MEMORY_CACHE_SIZE must be between 1 and 1000');
   }
 
   if (errors.length > 0) {

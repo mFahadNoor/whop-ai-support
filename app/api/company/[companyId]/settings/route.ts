@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dataManager, isValidBotSettings } from '@/lib/data-manager';
+import { verifyUserToken } from '@whop/api';
 
 const defaultSettings = {
   enabled: false,
@@ -14,12 +15,48 @@ const defaultSettings = {
   responseDelay: 1
 };
 
+// Helper function to verify user has admin access to company
+async function verifyCompanyAdminAccess(request: NextRequest, companyId: string) {
+  try {
+    // Verify user token
+    const { userId } = await verifyUserToken(request.headers);
+    
+    if (!userId) {
+      return { authorized: false, userId: null, error: 'No valid user token' };
+    }
+
+    // For now, we'll allow any authenticated user to access the bot settings
+    // TODO: In production, you should verify the user is an admin/owner of the specific company
+    // This can be done by checking:
+    // 1. If the user owns the company
+    // 2. If the user has admin role in the experience associated with this company
+    // 3. If the user is in a list of authorized administrators
+    
+    console.log(`User ${userId} accessing settings for company ${companyId}`);
+    
+    return { authorized: true, userId, error: null };
+    
+  } catch (error) {
+    console.error('Authentication error:', error);
+    return { authorized: false, userId: null, error: 'Authentication failed' };
+  }
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ companyId: string }> }
 ) {
   try {
     const { companyId } = await params;
+    
+    // Verify authentication and authorization
+    const auth = await verifyCompanyAdminAccess(request, companyId);
+    if (!auth.authorized) {
+      return NextResponse.json(
+        { error: 'Unauthorized: ' + auth.error },
+        { status: 401 }
+      );
+    }
     
     // Get settings using data manager
     const settings = await dataManager.getBotSettings(companyId);
@@ -41,6 +78,15 @@ export async function POST(
   try {
     const { companyId } = await params;
     
+    // Verify authentication and authorization
+    const auth = await verifyCompanyAdminAccess(request, companyId);
+    if (!auth.authorized) {
+      return NextResponse.json(
+        { error: 'Unauthorized: ' + auth.error },
+        { status: 401 }
+      );
+    }
+    
     const { settings } = await request.json();
 
     if (!isValidBotSettings(settings)) {
@@ -50,12 +96,12 @@ export async function POST(
     // Save settings using data manager
     await dataManager.saveBotSettings(companyId, settings);
 
-    console.log(`✅ Settings saved and cache invalidated for company ${companyId}`);
+    console.log(`✅ Settings saved by user ${auth.userId} for company ${companyId}`);
 
     return NextResponse.json({ 
       success: true, 
       settings: settings,
-      cacheInvalidated: true
+      savedBy: auth.userId
     });
   } catch (error) {
     console.error('Error saving bot settings:', error);
@@ -73,17 +119,25 @@ export async function DELETE(
   try {
     const { companyId } = await params;
     
-    // Force clear cache for this company using data manager
-    dataManager.clearCache(companyId);
-    console.log(`🔄 Manually cleared cache for company ${companyId}`);
+    // Verify authentication and authorization
+    const auth = await verifyCompanyAdminAccess(request, companyId);
+    if (!auth.authorized) {
+      return NextResponse.json(
+        { error: 'Unauthorized: ' + auth.error },
+        { status: 401 }
+      );
+    }
     
-    // Force refresh to get latest settings
-    const freshSettings = await dataManager.getBotSettings(companyId, true);
+    console.log(`🔄 Getting fresh settings for company ${companyId} (no caching) - requested by user ${auth.userId}`);
+    
+    // Get latest settings directly from database (no caching)
+    const freshSettings = await dataManager.getBotSettings(companyId);
     
     return NextResponse.json({ 
       success: true, 
-      message: 'Cache cleared and refreshed',
+      message: 'Fresh settings retrieved (no caching enabled)',
       settings: freshSettings,
+      requestedBy: auth.userId,
       timestamp: new Date().toISOString()
     });
   } catch (error) {

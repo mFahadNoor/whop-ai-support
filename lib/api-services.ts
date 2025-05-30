@@ -56,20 +56,21 @@ class WhopAPIService {
 
   /**
    * Send a message to a Whop feed with rate limiting and retry logic
+   * Returns the message ID if successful, null if failed
    */
-  async sendMessageWithRetry(feedId: string, content: string): Promise<boolean> {
+  async sendMessageWithRetry(feedId: string, content: string): Promise<string | null> {
     try {
       // Rate limiting check
       if (!this.isMessageAllowed(feedId)) {
         this.stats.messagesRateLimited++;
         logger.warn('Message rate limit exceeded', { feedId, contentPreview: content.substring(0, 50) });
-        return false;
+        return null;
       }
 
       // Validate content
       if (!content || content.trim().length === 0) {
         logger.warn('Attempted to send empty message', { feedId });
-        return false;
+        return null;
       }
 
       if (content.length > config.MAX_MESSAGE_LENGTH) {
@@ -78,7 +79,7 @@ class WhopAPIService {
       }
 
       // Use GraphQL for sending messages to Whop
-      const success = await retry(async () => {
+      const result = await retry(async () => {
         const headers: Record<string, string> = {
           'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
           'Content-Type': 'application/json',
@@ -135,21 +136,29 @@ class WhopAPIService {
           throw new Error('Failed to send message - no data returned');
         }
 
-        return { id: `message_sent_${Date.now()}` }; // Return a simple success indicator
+        // The sendMessage mutation should return the message ID
+        // If it's just a string, that's the message ID
+        // If it's an object, it might have an id field
+        let messageId = result.data.sendMessage;
+        if (typeof messageId === 'object' && messageId.id) {
+          messageId = messageId.id;
+        }
+
+        return messageId;
       });
 
-      if (success) {
+      if (result) {
         this.stats.messagesSent++;
         this.stats.lastMessageTime = new Date();
         logger.info('Message sent successfully via GraphQL', {
           feedId,
-          messageId: success.id,
+          messageId: result,
           action: 'message_sent_success'
         });
-        return true;
+        return result;
       }
 
-      return false;
+      return null;
 
     } catch (error) {
       this.stats.apiErrors++;
@@ -158,7 +167,7 @@ class WhopAPIService {
         contentPreview: content.substring(0, 50),
         apiErrors: this.stats.apiErrors
       });
-      return false;
+      return null;
     }
   }
 
@@ -275,27 +284,7 @@ class WhopAPIService {
       return null;
     } catch (error) {
       logger.error('Failed to fetch user info via SDK', error as Error, { userId });
-      
-      // Fallback to direct API call if SDK fails
-      try {
-        const fallbackResponse = await retry(async () => {
-          return await fetch(`${this.baseURL}/users/${userId}`, {
-            headers: {
-              'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
-            },
-          });
-        });
-
-        if (!fallbackResponse.ok) {
-          throw new Error(`HTTP ${fallbackResponse.status}: ${fallbackResponse.statusText}`);
-        }
-
-        const userData = await fallbackResponse.json();
-        return userData;
-      } catch (fallbackError) {
-        logger.error('Failed to fetch user info via fallback API', fallbackError as Error, { userId });
-        return null;
-      }
+      return null;
     }
   }
 

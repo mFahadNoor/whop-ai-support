@@ -81,19 +81,7 @@ class MessageProcessor {
 
     const messageContent = post.content || post.message;
     const messageId = post.entityId;
-    
-    // Debug: Log raw message data to understand Whop's mention formatting
-    if (messageContent && (messageContent.includes('@') || messageContent.includes('AI Support') || messageContent.includes('ai-support'))) {
-      console.log('🐛 DEBUG: Raw message with potential mention', {
-        messageContent,
-        rawContent: JSON.stringify(messageContent),
-        hasAt: messageContent.includes('@'),
-        hasAISupport: messageContent.includes('AI Support'),
-        hasAiSupport: messageContent.includes('ai-support'),
-        messageId,
-        post: JSON.stringify(post, null, 2)
-      });
-    }
+    const replyingToPostId = (post as any).replyingToPostId; // Extract reply information
     
     if (!messageId) {
       logger.debug('Message missing entityId, skipping', {
@@ -206,6 +194,7 @@ class MessageProcessor {
       user: post.user,
       experienceId: post.experienceId,
       messageType: messageType,
+      replyingToPostId: replyingToPostId,
     };
   }
 
@@ -427,8 +416,7 @@ class BotCoordinator {
       }
     }
 
-    const shouldForceRefresh = false;
-    const settings = await dataManager.getBotSettings(companyId, shouldForceRefresh);
+    const settings = await dataManager.getBotSettings(companyId);
 
     const messageLower = message.content.toLowerCase();
     const username = message.user.username || message.user.name || 'Unknown';
@@ -436,15 +424,18 @@ class BotCoordinator {
     // Check if bot is mentioned
     const isMentioned = this.isBotMentioned(message.content);
     
-    console.log('🐛 DEBUG: Processing message', {
-      content: message.content,
-      username,
-      companyId,
-      isMentioned,
-      settingsEnabled: settings.enabled,
-      hasKnowledgeBase: !!settings.knowledgeBase,
-      hasPresetQA: !!(settings.presetQA && settings.presetQA.length > 0)
-    });
+    // Check if this message is replying to a bot message
+    const isReplyingToBotMessage = !!(message.replyingToPostId && dataManager.isBotMessageTracked(message.replyingToPostId));
+
+    // For replies to bot messages, check if the reply actually needs a response
+    // Don't force response if it's just information/help being provided by moderators
+    const shouldForceResponseForReply = isReplyingToBotMessage && (
+      // Only force response if the reply contains a question or seems to be asking for clarification
+      message.content.includes('?') ||
+      /\b(how|what|when|where|why|can|could|would|should|is|are|does|do|did|will|have|has)\b/i.test(message.content.toLowerCase()) ||
+      // Or if it's a short response that might need clarification
+      (message.content.length < 50 && !/\b(thanks|thank you|ok|okay|got it|understood|perfect|great|awesome)\b/i.test(message.content.toLowerCase()))
+    );
 
     // Handle AI responses
     if (settings.enabled && (settings.knowledgeBase || (settings.presetQA && settings.presetQA.length > 0))) {
@@ -453,24 +444,36 @@ class BotCoordinator {
         username,
         messagePreview: message.content.substring(0, 50),
         isMentioned,
+        isReplyingToBotMessage,
+        shouldForceResponseForReply,
+        botEnabled: settings.enabled,
+        hasKnowledgeBase: !!settings.knowledgeBase,
+        hasPresetQA: !!(settings.presetQA && settings.presetQA.length > 0),
         action: 'ai_check_start',
       });
       
       // Add user message to context window
       dataManager.addMessageToContext(companyId, message.content, username, false);
       
+      // Determine if bot should respond (mentioned OR replying to bot message OR normal question detection)
+      const shouldForceResponse = isMentioned || shouldForceResponseForReply;
+      
       const aiResponse = await aiEngine.analyzeQuestion(
         message.content, 
         settings.knowledgeBase || '', 
         settings, 
         companyId,
-        isMentioned // Pass mention status to AI engine
+        shouldForceResponse,
+        username // Pass username for mentions
       );
       
       if (aiResponse) {
         const botMessage = `🤖 ${aiResponse}`;
-        const success = await whopAPI.sendMessageWithRetry(message.feedId, botMessage);
-        if (success) {
+        const messageId = await whopAPI.sendMessageWithRetry(message.feedId, botMessage);
+        if (messageId) {
+          // Track the bot message ID for reply detection
+          dataManager.trackBotMessage(messageId);
+          
           // Add bot response to context window
           dataManager.addMessageToContext(companyId, aiResponse, 'AI Support', true);
           
@@ -479,6 +482,9 @@ class BotCoordinator {
             username,
             responseLength: aiResponse.length,
             wasMentioned: isMentioned,
+            wasReplyingToBotMessage: isReplyingToBotMessage,
+            shouldForceResponseForReply,
+            botMessageId: messageId,
             action: 'ai_response_sent',
           });
         } else {
@@ -486,21 +492,32 @@ class BotCoordinator {
             companyId,
             username,
             wasMentioned: isMentioned,
+            wasReplyingToBotMessage: isReplyingToBotMessage,
+            shouldForceResponseForReply,
             action: 'ai_response_failed',
           });
         }
-      } else if (isMentioned) {
-        // If bot was mentioned but AI decided not to respond, send a fallback message
-        const fallbackMessage = "🤖 Hi! I'm here to help answer questions. Could you please ask me something specific about this community?";
-        const success = await whopAPI.sendMessageWithRetry(message.feedId, fallbackMessage);
-        if (success) {
+      } else if (shouldForceResponse) {
+        // If bot was mentioned or someone replied to bot with a question, send a fallback message
+        const fallbackMessage = shouldForceResponseForReply 
+          ? `@${username} Thanks for replying! Could you please ask me a more specific question about this community?`
+          : `@${username} Hi! I'm here to help answer questions. Could you please ask me something specific about this community?`;
+        const messageId = await whopAPI.sendMessageWithRetry(message.feedId, fallbackMessage);
+        if (messageId) {
+          // Track the fallback message ID too
+          dataManager.trackBotMessage(messageId);
+          
           // Add fallback response to context window
           dataManager.addMessageToContext(companyId, fallbackMessage.replace('🤖 ', ''), 'AI Support', true);
           
-          logger.info('Fallback mention response sent', {
+          logger.info('Fallback response sent', {
             companyId,
             username,
-            action: 'mention_fallback_sent',
+            isMentioned,
+            isReplyingToBotMessage,
+            shouldForceResponseForReply,
+            botMessageId: messageId,
+            action: 'fallback_response_sent',
           });
         }
       } else {
@@ -512,21 +529,45 @@ class BotCoordinator {
         });
       }
       return;
-    } else if (isMentioned) {
-      // Bot is mentioned but not enabled - send a gentle message
-      const notEnabledMessage = "🤖 Thanks for mentioning me! However, I'm currently not configured for this community. An admin can enable me in the settings.";
-      const success = await whopAPI.sendMessageWithRetry(message.feedId, notEnabledMessage);
-      if (success) {
-        logger.info('Bot mentioned but not enabled response sent', {
-          companyId,
-          username,
-          action: 'mention_not_enabled_sent',
-        });
-      }
-      return;
     } else {
-      // Still add non-bot messages to context even if bot doesn't respond
-      dataManager.addMessageToContext(companyId, message.content, username, false);
+      // Bot is not properly configured - add detailed logging
+      logger.debug('Bot not configured to respond', {
+        companyId,
+        username,
+        messagePreview: message.content.substring(0, 50),
+        botEnabled: settings.enabled,
+        hasKnowledgeBase: !!settings.knowledgeBase,
+        knowledgeBaseLength: settings.knowledgeBase?.length || 0,
+        hasPresetQA: !!(settings.presetQA && settings.presetQA.length > 0),
+        presetQACount: settings.presetQA?.length || 0,
+        isMentioned,
+        isReplyingToBotMessage,
+        action: 'bot_not_configured',
+      });
+      
+      if (isMentioned || shouldForceResponseForReply) {
+        // Bot is mentioned or someone replied to bot with a question but not enabled - send a gentle message
+        const notEnabledMessage = `@${username} Thanks for reaching out! However, I'm currently not configured for this community. An admin can enable me in the settings.`;
+        const messageId = await whopAPI.sendMessageWithRetry(message.feedId, notEnabledMessage);
+        if (messageId) {
+          // Track the not-enabled message ID too
+          dataManager.trackBotMessage(messageId);
+          
+          logger.info('Bot mentioned/replied to but not enabled response sent', {
+            companyId,
+            username,
+            isMentioned,
+            isReplyingToBotMessage,
+            shouldForceResponseForReply,
+            botMessageId: messageId,
+            action: 'mention_not_enabled_sent',
+          });
+        }
+        return;
+      } else {
+        // Still add non-bot messages to context even if bot doesn't respond
+        dataManager.addMessageToContext(companyId, message.content, username, false);
+      }
     }
 
     logger.debug('Message did not trigger any bot actions', {
@@ -578,7 +619,7 @@ class BotCoordinator {
     console.log('🧹 Running maintenance...');
     
     messageProcessor.cleanup();
-    dataManager.cleanupExpiredCache();
+    dataManager.cleanupExpiredContext();
     
     const now = Date.now();
     const staleThreshold = 5 * 60 * 1000; // 5 minutes
@@ -760,6 +801,8 @@ export async function startBot() {
   console.log('🚀 Starting Whop AI Bot...\n');
   console.log('Features:');
   console.log('  • Smart AI question detection');
+  console.log('  • @ mention detection');
+  console.log('  • 25-message context window');
   console.log('  • Admin-only configuration');
   console.log('  • Real-time responses');
   console.log('  • Rate limiting & caching\n');
@@ -777,4 +820,4 @@ if (require.main === module) {
     logger.error('Bot startup failed', error, { action: 'startup_failed' });
     process.exit(1);
   });
-} 
+}

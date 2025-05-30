@@ -3,35 +3,35 @@
  * 
  * This module provides the core AI functionality for the Whop support bot.
  * It intelligently processes user messages, determines if they need responses,
- * and generates contextual answers using OpenRouter AI models.
+ * and generates fresh contextual answers using OpenRouter AI models.
  * 
  * Key Features:
- * - Smart question detection with 80%+ token savings
+ * - Smart question detection with efficient processing
  * - Preset Q&A matching for instant responses
  * - Contextual AI responses using company knowledge base
- * - Response caching to reduce API costs and improve speed
  * - Rate limiting to prevent API quota exhaustion
  * - Multiple response styles (professional, friendly, casual, technical)
  * - Automatic fallback handling for API failures
+ * - Fresh responses for maximum accuracy
  * 
  * Question Processing Pipeline:
  * 1. Quick heuristic check for question indicators
  * 2. Preset Q&A matching for common questions
  * 3. AI-powered question confirmation
  * 4. Context-aware response generation
- * 5. Response caching and rate limit tracking
+ * 5. Rate limit tracking
  * 
  * Performance Optimizations:
- * - Response caching (30-second TTL)
  * - Rate limiting (10 AI requests per minute per company)
  * - Efficient question detection to avoid unnecessary AI calls
- * - Automatic cache cleanup and memory management
+ * - Fresh responses generated every time for accuracy
+ * - Automatic memory management
  * 
  * Usage:
  * ```typescript
- * const response = await aiEngine.processQuestion(message, settings);
- * if (response.shouldRespond) {
- *   // Send response.message to user
+ * const response = await aiEngine.analyzeQuestion(message, settings);
+ * if (response) {
+ *   // Send response to user
  * }
  * ```
  */
@@ -43,7 +43,7 @@ import { BotSettings, config, logger, retry, isQuestion, extractKeyPhrases, sani
 // AI PROMPTS
 // =============================================================================
 
-export function createSystemPrompt(knowledgeBase: string, settings: BotSettings, isMentioned: boolean = false): string {
+export function createSystemPrompt(knowledgeBase: string, settings: BotSettings, shouldForceResponse: boolean = false): string {
   let systemPrompt = '';
 
   // Base personality based on response style
@@ -80,9 +80,9 @@ export function createSystemPrompt(knowledgeBase: string, settings: BotSettings,
   // Add response guidelines
   systemPrompt += '\n\nGuidelines:';
   
-  if (isMentioned) {
-    systemPrompt += '\n- You have been directly mentioned, so you should provide a helpful response';
-    systemPrompt += '\n- If someone mentions you casually, politely redirect them to ask a specific question';
+  if (shouldForceResponse) {
+    systemPrompt += '\n- You have been directly mentioned or someone replied to your message, so you should provide a helpful response';
+    systemPrompt += '\n- If someone mentions you casually or replies with casual conversation, politely redirect them to ask a specific question';
     systemPrompt += '\n- If they greet you or say hi, respond politely and ask how you can help with this community';
   } else {
     systemPrompt += '\n- ONLY respond to clear questions that need support or information about this community';
@@ -183,17 +183,9 @@ class RateLimiter {
 // AI ENGINE
 // =============================================================================
 
-interface CachedResponse {
-  response: string;
-  timestamp: Date;
-}
-
 export class AIEngine {
   private openai: OpenAI;
   private rateLimiter = new RateLimiter();
-  private responseCache = new Map<string, CachedResponse>();
-  private readonly CACHE_TTL_MS = 30 * 1000; // 30 seconds
-  private readonly MAX_CACHE_SIZE = 1000;
 
   constructor() {
     this.openai = new OpenAI({
@@ -201,7 +193,7 @@ export class AIEngine {
       apiKey: config.OPENROUTER_API_KEY,
     });
 
-    // Set up periodic cleanup
+    // Set up periodic cleanup for rate limiter only
     setInterval(() => {
       this.cleanup();
     }, 5 * 60 * 1000); // Every 5 minutes
@@ -215,7 +207,8 @@ export class AIEngine {
     knowledgeBase: string,
     settings: BotSettings,
     companyId: string,
-    isMentioned: boolean = false
+    shouldForceResponse: boolean = false,
+    username?: string
   ): Promise<string | null> {
     try {
       // Input validation
@@ -233,45 +226,32 @@ export class AIEngine {
         return null;
       }
 
-      // If bot is mentioned, skip question detection and force response
-      const shouldRespond = isMentioned || isQuestion(truncatedMessage);
+      // If bot should force response (mentioned or replying to bot), skip question detection
+      const shouldRespond = shouldForceResponse || isQuestion(truncatedMessage);
       
       if (!shouldRespond) {
-        logger.debug('Message does not appear to be a question and bot not mentioned', { 
+        logger.debug('Message does not appear to be a question and no forced response needed', { 
           companyId, 
           messagePreview: truncatedMessage.substring(0, 50),
-          isMentioned
+          shouldForceResponse
         });
         return null;
       }
 
       // Check preset Q&A first
-      const presetResponse = this.checkPresetQA(truncatedMessage, settings.presetQA || []);
+      const presetResponse = this.checkPresetQA(truncatedMessage, settings.presetQA || [], username);
       if (presetResponse) {
         logger.info('Found preset Q&A match', { 
           companyId, 
           messagePreview: truncatedMessage.substring(0, 50),
           responseLength: presetResponse.length,
-          isMentioned
+          shouldForceResponse
         });
         return presetResponse;
       }
 
-      // Check cache
-      const cacheKey = this.getCacheKey(truncatedMessage, knowledgeBase);
-      const cachedResponse = this.responseCache.get(cacheKey);
-      if (cachedResponse && (Date.now() - cachedResponse.timestamp.getTime()) < this.CACHE_TTL_MS) {
-        logger.debug('Returning cached AI response', { 
-          companyId, 
-          messagePreview: truncatedMessage.substring(0, 50),
-          cacheAge: Date.now() - cachedResponse.timestamp.getTime(),
-          isMentioned
-        });
-        return cachedResponse.response;
-      }
-
-      // AI analysis - skip question detection if mentioned
-      if (!isMentioned) {
+      // AI analysis - skip question detection if forced response
+      if (!shouldForceResponse) {
         const isActualQuestion = await this.isQuestionAnalysis(truncatedMessage);
         if (!isActualQuestion) {
           logger.debug('AI determined message is not a question', { 
@@ -283,16 +263,13 @@ export class AIEngine {
       }
 
       // Generate AI response
-      const aiResponse = await this.generateAIResponse(truncatedMessage, knowledgeBase, settings, companyId, isMentioned);
+      const aiResponse = await this.generateAIResponse(truncatedMessage, knowledgeBase, settings, companyId, shouldForceResponse, username);
       if (aiResponse) {
-        // Cache the response
-        this.cacheResponse(cacheKey, aiResponse);
-        
         logger.info('Generated new AI response', { 
           companyId, 
           messagePreview: truncatedMessage.substring(0, 50),
           responseLength: aiResponse.length,
-          isMentioned
+          shouldForceResponse
         });
       }
 
@@ -302,7 +279,7 @@ export class AIEngine {
       logger.error('Error in AI analysis', error as Error, { 
         companyId, 
         messagePreview: message.substring(0, 50),
-        isMentioned
+        shouldForceResponse
       });
       return null;
     }
@@ -311,37 +288,45 @@ export class AIEngine {
   /**
    * Check if message matches any preset Q&A
    */
-  private checkPresetQA(message: string, presetQA: Array<{question: string, answer: string, enabled: boolean}>): string | null {
+  private checkPresetQA(message: string, presetQA: Array<{question: string, answer: string, enabled: boolean}>, username?: string): string | null {
     if (!presetQA || presetQA.length === 0) {
       return null;
     }
 
-    const messageLower = message.toLowerCase();
-    const messageKeyPhrases = extractKeyPhrases(message);
+    const messageLower = message.toLowerCase().trim();
 
     for (const qa of presetQA) {
       if (!qa.enabled) continue;
 
-      const questionLower = qa.question.toLowerCase();
-      const questionKeyPhrases = extractKeyPhrases(qa.question);
+      const questionLower = qa.question.toLowerCase().trim();
 
-      // Exact match
-      if (messageLower.includes(questionLower) || questionLower.includes(messageLower)) {
-        return qa.answer;
+      // Skip very short questions (less than 5 chars) to prevent over-matching
+      if (questionLower.length < 5) {
+        continue;
       }
 
-      // Key phrase matching
-      const commonPhrases = messageKeyPhrases.filter(phrase => 
-        questionKeyPhrases.some(qPhrase => 
-          qPhrase.includes(phrase) || phrase.includes(qPhrase)
-        )
-      );
+      // 1. Exact match only (case insensitive) - most conservative
+      if (messageLower === questionLower) {
+        logger.debug('Preset Q&A exact match found', {
+          question: qa.question,
+          answer: qa.answer,
+          messagePreview: message.substring(0, 50)
+        });
+        return username ? `@${username} ${qa.answer}` : qa.answer;
+      }
 
-      if (commonPhrases.length >= Math.min(2, messageKeyPhrases.length / 2)) {
-        return qa.answer;
+      // 2. Very strict contains match - only if the question is short and message contains it exactly
+      if (questionLower.length <= 15 && messageLower.includes(questionLower)) {
+        logger.debug('Preset Q&A strict contains match found', {
+          question: qa.question,
+          answer: qa.answer,
+          messagePreview: message.substring(0, 50)
+        });
+        return username ? `@${username} ${qa.answer}` : qa.answer;
       }
     }
 
+    // Remove all fuzzy matching, word similarity, and key phrase matching to prevent false positives
     return null;
   }
 
@@ -386,10 +371,11 @@ export class AIEngine {
     knowledgeBase: string, 
     settings: BotSettings,
     companyId: string,
-    isMentioned: boolean
+    shouldForceResponse: boolean,
+    username?: string
   ): Promise<string | null> {
     try {
-      const systemPrompt = createSystemPrompt(knowledgeBase, settings, isMentioned);
+      const systemPrompt = createSystemPrompt(knowledgeBase, settings, shouldForceResponse);
       
       // Get conversation context
       const { dataManager } = await import('./data-manager');
@@ -413,7 +399,13 @@ export class AIEngine {
         });
       });
 
-      const aiResponse = response.choices[0]?.message?.content?.trim();
+      let aiResponse = response.choices[0]?.message?.content?.trim();
+      
+      // Add username mention if provided and not already included
+      if (aiResponse && username && shouldForceResponse && !aiResponse.includes(`@${username}`)) {
+        aiResponse = `@${username} ${aiResponse}`;
+      }
+      
       return aiResponse || null;
 
     } catch (error) {
@@ -423,43 +415,11 @@ export class AIEngine {
   }
 
   /**
-   * Cache management
-   */
-  private getCacheKey(message: string, knowledgeBase: string): string {
-    const messageKey = extractKeyPhrases(message).join('_');
-    const kbHash = knowledgeBase.slice(0, 100); // Simple hash
-    return `${messageKey}_${kbHash}`.replace(/[^a-zA-Z0-9_]/g, '');
-  }
-
-  private cacheResponse(key: string, response: string) {
-    // Clean cache if it's getting too large
-    if (this.responseCache.size >= this.MAX_CACHE_SIZE) {
-      const oldestKeys = Array.from(this.responseCache.keys()).slice(0, this.MAX_CACHE_SIZE / 2);
-      for (const oldKey of oldestKeys) {
-        this.responseCache.delete(oldKey);
-      }
-    }
-
-    this.responseCache.set(key, {
-      response,
-      timestamp: new Date()
-    });
-  }
-
-  /**
    * Cleanup expired cache entries and rate limits
    */
   private cleanup() {
     const now = Date.now();
     let cleanedCount = 0;
-
-    // Clean response cache
-    for (const [key, cached] of this.responseCache.entries()) {
-      if ((now - cached.timestamp.getTime()) > this.CACHE_TTL_MS) {
-        this.responseCache.delete(key);
-        cleanedCount++;
-      }
-    }
 
     // Clean rate limiter
     this.rateLimiter.cleanup();
@@ -467,7 +427,7 @@ export class AIEngine {
     if (cleanedCount > 0) {
       logger.debug('AI engine cleanup completed', { 
         cleanedCacheEntries: cleanedCount,
-        remainingCacheSize: this.responseCache.size
+        remainingCacheSize: 0
       });
     }
   }
@@ -486,9 +446,9 @@ export class AIEngine {
   getStats() {
     return {
       responseCache: {
-        size: this.responseCache.size,
-        maxSize: this.MAX_CACHE_SIZE,
-        ttlMs: this.CACHE_TTL_MS
+        size: 0,
+        maxSize: 0,
+        ttlMs: 0
       },
       rateLimiter: this.rateLimiter.getStats(),
       model: config.OPENROUTER_MODEL,

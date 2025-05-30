@@ -1,28 +1,28 @@
 /**
- * Data Manager - Database Operations and Caching
+ * Data Manager - Database Operations and Context Management
  * 
- * This module handles all database operations and caching for the AI bot.
+ * This module handles all database operations and context management for the AI bot.
  * It provides a high-level interface for managing company settings, experience mappings,
- * and bot configurations with built-in caching for optimal performance.
+ * and bot configurations with fresh data from the database.
  * 
  * Key Features:
- * - Company settings management with automatic caching
+ * - Company settings management with direct database access
  * - Experience-to-company mapping for multi-tenant support
- * - Intelligent cache invalidation and refresh strategies
  * - Database connection management with Prisma ORM
  * - Error handling and retry logic for database operations
- * - Memory-efficient caching with TTL (Time To Live) support
+ * - Context window management for conversation history
+ * - Bot message tracking for reply detection
  * 
- * Caching Strategy:
- * - Settings are cached for 5 minutes by default
- * - Cache is automatically invalidated when settings are updated
+ * Performance Strategy:
+ * - Direct database queries for maximum accuracy
+ * - Context windows are maintained in memory with TTL
  * - Experience mappings are cached until explicitly refreshed
- * - Least Recently Used (LRU) eviction when cache size limits are reached
+ * - Bot message tracking for reply detection
  * 
  * Usage:
  * ```typescript
- * const settings = await dataManager.getCompanySettings('company_123');
- * await dataManager.updateCompanySettings('company_123', newSettings);
+ * const settings = await dataManager.getBotSettings('company_123');
+ * await dataManager.saveBotSettings('company_123', newSettings);
  * ```
  */
 
@@ -151,11 +151,6 @@ export function validateBotSettings(settings: Partial<BotSettings>): void {
 // COMPANY MANAGER
 // =============================================================================
 
-interface CachedBotSettings {
-  settings: BotSettings;
-  timestamp: Date;
-}
-
 interface ContextMessage {
   content: string;
   username: string;
@@ -169,20 +164,22 @@ interface CompanyContext {
 }
 
 export class DataManager {
-  private settingsCache = new Map<string, CachedBotSettings>();
   private experienceToCompanyMap = new Map<string, string>();
   private experienceMappedCallback?: (experienceId: string) => void;
-  private readonly CACHE_TTL_MS = 30 * 1000; // 30 seconds instead of 5 minutes
   
   // Context window storage
   private contextCache = new Map<string, CompanyContext>();
   private readonly MAX_CONTEXT_MESSAGES = 25;
   private readonly CONTEXT_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+  // Bot message tracking for reply detection
+  private botMessageIds = new Set<string>();
+  private readonly MAX_BOT_MESSAGE_IDS = 1000; // Limit to prevent memory issues
+
   constructor() {
-    // Set up periodic cleanup
+    // Set up periodic cleanup for context only
     setInterval(() => {
-      this.cleanupExpiredCache();
+      this.cleanupExpiredContext();
     }, 2 * 60 * 1000); // Clean up every 2 minutes
     
     // Set up periodic mapping discovery (every 5 minutes)
@@ -391,16 +388,7 @@ export class DataManager {
     }
   }
 
-  async getBotSettings(companyId: string, forceRefresh: boolean = false): Promise<BotSettings> {
-    // Check cache first (unless force refresh)
-    if (!forceRefresh) {
-      const cached = this.settingsCache.get(companyId);
-      if (cached && (Date.now() - cached.timestamp.getTime()) < this.CACHE_TTL_MS) {
-        logger.debug('Returning cached bot settings', { companyId, cacheAge: Date.now() - cached.timestamp.getTime() });
-        return cached.settings;
-      }
-    }
-
+  async getBotSettings(companyId: string): Promise<BotSettings> {
     // Fetch from database
     try {
       const company = await prisma.company.findUnique({
@@ -428,13 +416,7 @@ export class DataManager {
         settings = defaultSettings;
       }
 
-      // Cache the settings
-      this.settingsCache.set(companyId, {
-        settings,
-        timestamp: new Date()
-      });
-
-      logger.debug('Fetched and cached bot settings', { 
+      logger.debug('Fetched bot settings from database', { 
         companyId, 
         enabled: settings.enabled,
         hasKnowledgeBase: !!settings.knowledgeBase,
@@ -445,13 +427,6 @@ export class DataManager {
     } catch (error) {
       logger.error('Failed to fetch bot settings', error as Error, { companyId });
       
-      // Return cached version if available, otherwise defaults
-      const cached = this.settingsCache.get(companyId);
-      if (cached) {
-        logger.warn('Returning stale cached settings due to database error', { companyId });
-        return cached.settings;
-      }
-
       // Return safe defaults
       return {
         enabled: false,
@@ -499,12 +474,6 @@ export class DataManager {
         }
       });
 
-      // Update cache
-      this.settingsCache.set(companyId, {
-        settings: sanitizedSettings,
-        timestamp: new Date()
-      });
-
       logger.info('Bot settings saved successfully', { 
         companyId,
         enabled: sanitizedSettings.enabled,
@@ -518,63 +487,38 @@ export class DataManager {
     }
   }
 
-  clearCache(companyId: string) {
-    this.settingsCache.delete(companyId);
-    logger.debug('Cleared cache for company', { companyId });
-  }
-
   clearAllCaches() {
-    this.settingsCache.clear();
     this.experienceToCompanyMap.clear();
-    logger.info('Cleared all caches');
+    this.contextCache.clear();
+    this.botMessageIds.clear();
+    logger.info('All caches cleared including bot message tracking');
   }
 
-  cleanupExpiredCache() {
+  cleanupExpiredContext() {
     const now = Date.now();
     let cleanedCount = 0;
     
-    for (const [companyId, cached] of this.settingsCache.entries()) {
-      if ((now - cached.timestamp.getTime()) > this.CACHE_TTL_MS) {
-        this.settingsCache.delete(companyId);
+    for (const [companyId, context] of this.contextCache.entries()) {
+      if ((now - context.lastUpdated.getTime()) > this.CONTEXT_TTL_MS) {
+        this.contextCache.delete(companyId);
         cleanedCount++;
       }
     }
     
-    // Also cleanup expired context windows
-    let contextCleanedCount = 0;
-    for (const [companyId, context] of this.contextCache.entries()) {
-      if ((now - context.lastUpdated.getTime()) > this.CONTEXT_TTL_MS) {
-        this.contextCache.delete(companyId);
-        contextCleanedCount++;
-      }
-    }
-    
-    if (cleanedCount > 0 || contextCleanedCount > 0) {
-      logger.debug('Cleaned up expired cache entries', { 
-        settingsCleanedCount: cleanedCount,
-        contextCleanedCount: contextCleanedCount
+    if (cleanedCount > 0) {
+      logger.debug('Cleaned up expired context entries', { 
+        contextCleanedCount: cleanedCount
       });
     }
   }
 
   getStats() {
     return {
-      settingsCache: {
-        size: this.settingsCache.size,
-        companies: Array.from(this.settingsCache.keys())
-      },
-      experienceMappings: {
-        size: this.experienceToCompanyMap.size,
-        mappings: Object.fromEntries(this.experienceToCompanyMap)
-      },
-      contextWindows: {
-        size: this.contextCache.size,
-        companies: Array.from(this.contextCache.keys()),
-        totalMessages: Array.from(this.contextCache.values()).reduce((sum, ctx) => sum + ctx.messages.length, 0),
-        maxMessagesPerCompany: this.MAX_CONTEXT_MESSAGES
-      },
-      cacheTtlMs: this.CACHE_TTL_MS,
-      contextTtlMs: this.CONTEXT_TTL_MS
+      experienceMappings: this.experienceToCompanyMap.size,
+      activeContextWindows: this.contextCache.size,
+      totalContextMessages: Array.from(this.contextCache.values()).reduce((sum, ctx) => sum + ctx.messages.length, 0),
+      trackedBotMessages: this.botMessageIds.size,
+      timestamp: new Date().toISOString()
     };
   }
 
@@ -674,6 +618,37 @@ export class DataManager {
   clearCompanyContext(companyId: string) {
     this.contextCache.delete(companyId);
     logger.debug('Cleared context window for company', { companyId });
+  }
+
+  // =============================================================================
+  // BOT MESSAGE TRACKING
+  // =============================================================================
+
+  trackBotMessage(messageId: string) {
+    if (this.botMessageIds.size < this.MAX_BOT_MESSAGE_IDS) {
+      this.botMessageIds.add(messageId);
+    } else {
+      logger.warn('Bot message tracking limit reached', {
+        currentCount: this.botMessageIds.size,
+        maxCount: this.MAX_BOT_MESSAGE_IDS
+      });
+    }
+  }
+
+  isBotMessageTracked(messageId: string): boolean {
+    return this.botMessageIds.has(messageId);
+  }
+
+  /**
+   * Get experience ID by company ID (reverse lookup)
+   */
+  getExperienceIdByCompanyId(companyId: string): string | null {
+    for (const [experienceId, mappedCompanyId] of this.experienceToCompanyMap.entries()) {
+      if (mappedCompanyId === companyId) {
+        return experienceId;
+      }
+    }
+    return null;
   }
 }
 
