@@ -43,7 +43,7 @@ import { BotSettings, config, logger, retry, isQuestion, extractKeyPhrases, sani
 // AI PROMPTS
 // =============================================================================
 
-export function createSystemPrompt(knowledgeBase: string, settings: BotSettings): string {
+export function createSystemPrompt(knowledgeBase: string, settings: BotSettings, isMentioned: boolean = false): string {
   let systemPrompt = '';
 
   // Base personality based on response style
@@ -79,12 +79,20 @@ export function createSystemPrompt(knowledgeBase: string, settings: BotSettings)
 
   // Add response guidelines
   systemPrompt += '\n\nGuidelines:';
-  systemPrompt += '\n- Only respond to clear questions or help requests';
+  
+  if (isMentioned) {
+    systemPrompt += '\n- You have been directly mentioned, so you should always provide a helpful response';
+    systemPrompt += '\n- Even if the message isn\'t a clear question, try to be helpful and engaging';
+    systemPrompt += '\n- If someone just says hi or mentions you casually, respond politely and ask how you can help';
+  } else {
+    systemPrompt += '\n- Only respond to clear questions or help requests';
+    systemPrompt += '\n- Do not respond to spam, inappropriate content, or off-topic messages';
+  }
+  
   systemPrompt += '\n- Keep responses concise and helpful (under 500 characters)';
   systemPrompt += '\n- Use the community information provided to give accurate answers';
   systemPrompt += '\n- If you don\'t know something, say so instead of guessing';
   systemPrompt += '\n- Be respectful and inclusive in all responses';
-  systemPrompt += '\n- Do not respond to spam, inappropriate content, or off-topic messages';
 
   return systemPrompt;
 }
@@ -198,7 +206,8 @@ export class AIEngine {
     message: string,
     knowledgeBase: string,
     settings: BotSettings,
-    companyId: string
+    companyId: string,
+    isMentioned: boolean = false
   ): Promise<string | null> {
     try {
       // Input validation
@@ -216,11 +225,14 @@ export class AIEngine {
         return null;
       }
 
-      // Quick question check
-      if (!isQuestion(truncatedMessage)) {
-        logger.debug('Message does not appear to be a question', { 
+      // If bot is mentioned, skip question detection and force response
+      const shouldRespond = isMentioned || isQuestion(truncatedMessage);
+      
+      if (!shouldRespond) {
+        logger.debug('Message does not appear to be a question and bot not mentioned', { 
           companyId, 
-          messagePreview: truncatedMessage.substring(0, 50) 
+          messagePreview: truncatedMessage.substring(0, 50),
+          isMentioned
         });
         return null;
       }
@@ -231,7 +243,8 @@ export class AIEngine {
         logger.info('Found preset Q&A match', { 
           companyId, 
           messagePreview: truncatedMessage.substring(0, 50),
-          responseLength: presetResponse.length
+          responseLength: presetResponse.length,
+          isMentioned
         });
         return presetResponse;
       }
@@ -243,23 +256,26 @@ export class AIEngine {
         logger.debug('Returning cached AI response', { 
           companyId, 
           messagePreview: truncatedMessage.substring(0, 50),
-          cacheAge: Date.now() - cachedResponse.timestamp.getTime()
+          cacheAge: Date.now() - cachedResponse.timestamp.getTime(),
+          isMentioned
         });
         return cachedResponse.response;
       }
 
-      // AI analysis - first check if it's actually a question
-      const isActualQuestion = await this.isQuestionAnalysis(truncatedMessage);
-      if (!isActualQuestion) {
-        logger.debug('AI determined message is not a question', { 
-          companyId, 
-          messagePreview: truncatedMessage.substring(0, 50) 
-        });
-        return null;
+      // AI analysis - skip question detection if mentioned
+      if (!isMentioned) {
+        const isActualQuestion = await this.isQuestionAnalysis(truncatedMessage);
+        if (!isActualQuestion) {
+          logger.debug('AI determined message is not a question', { 
+            companyId, 
+            messagePreview: truncatedMessage.substring(0, 50) 
+          });
+          return null;
+        }
       }
 
       // Generate AI response
-      const aiResponse = await this.generateAIResponse(truncatedMessage, knowledgeBase, settings);
+      const aiResponse = await this.generateAIResponse(truncatedMessage, knowledgeBase, settings, isMentioned);
       if (aiResponse) {
         // Cache the response
         this.cacheResponse(cacheKey, aiResponse);
@@ -267,7 +283,8 @@ export class AIEngine {
         logger.info('Generated new AI response', { 
           companyId, 
           messagePreview: truncatedMessage.substring(0, 50),
-          responseLength: aiResponse.length
+          responseLength: aiResponse.length,
+          isMentioned
         });
       }
 
@@ -276,7 +293,8 @@ export class AIEngine {
     } catch (error) {
       logger.error('Error in AI analysis', error as Error, { 
         companyId, 
-        messagePreview: message.substring(0, 50) 
+        messagePreview: message.substring(0, 50),
+        isMentioned
       });
       return null;
     }
@@ -358,10 +376,11 @@ export class AIEngine {
   private async generateAIResponse(
     message: string, 
     knowledgeBase: string, 
-    settings: BotSettings
+    settings: BotSettings,
+    isMentioned: boolean
   ): Promise<string | null> {
     try {
-      const systemPrompt = createSystemPrompt(knowledgeBase, settings);
+      const systemPrompt = createSystemPrompt(knowledgeBase, settings, isMentioned);
 
       const response = await retry(async () => {
         return await this.openai.chat.completions.create({

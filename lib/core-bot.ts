@@ -46,6 +46,9 @@ import { logger } from './shared-utils';
 const WHOP_APP_API_KEY = process.env.WHOP_APP_API_KEY;
 const WHOP_AGENT_USER_ID = process.env.WHOP_AGENT_USER_ID;
 
+// Bot username for @ mention detection
+let BOT_USERNAME: string | null = null;
+
 /**
  * Message Processor - Handles incoming WebSocket messages and deduplication
  */
@@ -253,6 +256,34 @@ class BotCoordinator {
         });
       });
     });
+    
+    // Fetch bot username on startup
+    this.initializeBotInfo();
+  }
+  
+  private async initializeBotInfo() {
+    if (WHOP_AGENT_USER_ID) {
+      try {
+        const botUser = await whopAPI.getUser(WHOP_AGENT_USER_ID);
+        if (botUser?.username) {
+          BOT_USERNAME = botUser.username;
+          console.log(`🤖 Bot username: @${BOT_USERNAME}`);
+        }
+      } catch (error) {
+        logger.warn('Failed to fetch bot username for @ mention detection', { error });
+      }
+    }
+  }
+  
+  /**
+   * Check if message contains @ mention of the bot
+   */
+  private isBotMentioned(content: string): boolean {
+    if (!BOT_USERNAME) return false;
+    
+    // Check for @username (case insensitive)
+    const mentionPattern = new RegExp(`@${BOT_USERNAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    return mentionPattern.test(content);
   }
 
   async processChatMessage(message: ProcessedMessage): Promise<void> {
@@ -356,6 +387,9 @@ class BotCoordinator {
 
     const messageLower = message.content.toLowerCase();
     const username = message.user.username || message.user.name || 'Unknown';
+    
+    // Check if bot is mentioned
+    const isMentioned = this.isBotMentioned(message.content);
 
     // Handle AI responses
     if (settings.enabled && (settings.knowledgeBase || (settings.presetQA && settings.presetQA.length > 0))) {
@@ -363,6 +397,7 @@ class BotCoordinator {
         companyId,
         username,
         messagePreview: message.content.substring(0, 50),
+        isMentioned,
         action: 'ai_check_start',
       });
       
@@ -370,7 +405,8 @@ class BotCoordinator {
         message.content, 
         settings.knowledgeBase || '', 
         settings, 
-        companyId
+        companyId,
+        isMentioned // Pass mention status to AI engine
       );
       
       if (aiResponse) {
@@ -381,13 +417,26 @@ class BotCoordinator {
             companyId,
             username,
             responseLength: aiResponse.length,
+            wasMentioned: isMentioned,
             action: 'ai_response_sent',
           });
         } else {
           logger.error('Failed to send AI response', undefined, {
             companyId,
             username,
+            wasMentioned: isMentioned,
             action: 'ai_response_failed',
+          });
+        }
+      } else if (isMentioned) {
+        // If bot was mentioned but AI decided not to respond, send a fallback message
+        const fallbackMessage = "🤖 Hi! I'm here to help answer questions. Could you please ask me something specific about this community?";
+        const success = await whopAPI.sendMessageWithRetry(message.feedId, fallbackMessage);
+        if (success) {
+          logger.info('Fallback mention response sent', {
+            companyId,
+            username,
+            action: 'mention_fallback_sent',
           });
         }
       } else {
@@ -396,6 +445,18 @@ class BotCoordinator {
           username,
           messagePreview: message.content.substring(0, 50),
           action: 'ai_no_response',
+        });
+      }
+      return;
+    } else if (isMentioned) {
+      // Bot is mentioned but not enabled - send a gentle message
+      const notEnabledMessage = "🤖 Thanks for mentioning me! However, I'm currently not configured for this community. An admin can enable me in the settings.";
+      const success = await whopAPI.sendMessageWithRetry(message.feedId, notEnabledMessage);
+      if (success) {
+        logger.info('Bot mentioned but not enabled response sent', {
+          companyId,
+          username,
+          action: 'mention_not_enabled_sent',
         });
       }
       return;
