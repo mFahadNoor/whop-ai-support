@@ -26,7 +26,11 @@ export async function GET(
     const auth = await verifyCompanyAdminAccess(request, companyId);
     if (!auth.authorized) {
       return NextResponse.json(
-        { error: 'Unauthorized: ' + auth.error },
+        { 
+          error: auth.userMessage || auth.error,
+          details: auth.error,
+          code: 'UNAUTHORIZED' 
+        },
         { status: 401 }
       );
     }
@@ -55,7 +59,11 @@ export async function POST(
     const auth = await verifyCompanyAdminAccess(request, companyId);
     if (!auth.authorized) {
       return NextResponse.json(
-        { error: 'Unauthorized: ' + auth.error },
+        { 
+          error: auth.userMessage || auth.error,
+          details: auth.error,
+          code: 'UNAUTHORIZED' 
+        },
         { status: 401 }
       );
     }
@@ -96,7 +104,11 @@ export async function DELETE(
     const auth = await verifyCompanyAdminAccess(request, companyId);
     if (!auth.authorized) {
       return NextResponse.json(
-        { error: 'Unauthorized: ' + auth.error },
+        { 
+          error: auth.userMessage || auth.error,
+          details: auth.error,
+          code: 'UNAUTHORIZED' 
+        },
         { status: 401 }
       );
     }

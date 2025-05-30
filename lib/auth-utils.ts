@@ -14,6 +14,7 @@ export interface AuthResult {
   authorized: boolean;
   userId: string | null;
   error: string | null;
+  userMessage?: string; // User-friendly message for display
 }
 
 /**
@@ -32,7 +33,12 @@ export async function verifyCompanyAdminAccess(
     const { userId } = await verifyUserToken(request.headers);
     
     if (!userId) {
-      return { authorized: false, userId: null, error: 'No valid user token' };
+      return { 
+        authorized: false, 
+        userId: null, 
+        error: 'No valid user token',
+        userMessage: 'You must be logged in to access this page. Please sign in and try again.'
+      };
     }
 
     // Check if user owns or has admin access to this specific company
@@ -43,7 +49,12 @@ export async function verifyCompanyAdminAccess(
       });
 
       if (!companyResponse.data) {
-        return { authorized: false, userId, error: 'Company not found' };
+        return { 
+          authorized: false, 
+          userId, 
+          error: 'Company not found',
+          userMessage: 'This company could not be found. Please check the URL and try again.'
+        };
       }
 
       const company = companyResponse.data;
@@ -62,7 +73,12 @@ export async function verifyCompanyAdminAccess(
 
       // User doesn't have access to this company
       console.log(`❌ User ${userId} denied access to company ${companyId} - not owner or admin`);
-      return { authorized: false, userId, error: 'You do not have admin access to this company' };
+      return { 
+        authorized: false, 
+        userId, 
+        error: 'You do not have admin access to this company',
+        userMessage: `You don't have permission to manage settings for this company. Only the company owner or authorized administrators can access this page.`
+      };
 
     } catch (apiError) {
       console.error('Error checking company ownership:', apiError);
@@ -87,12 +103,22 @@ export async function verifyCompanyAdminAccess(
         console.error('Fallback auth check failed:', fallbackError);
       }
 
-      return { authorized: false, userId, error: 'Unable to verify company access' };
+      return { 
+        authorized: false, 
+        userId, 
+        error: 'Unable to verify company access',
+        userMessage: 'Unable to verify your access to this company. Please contact support if you believe you should have access.'
+      };
     }
     
   } catch (error) {
     console.error('Authentication error:', error);
-    return { authorized: false, userId: null, error: 'Authentication failed' };
+    return { 
+      authorized: false, 
+      userId: null, 
+      error: 'Authentication failed',
+      userMessage: 'Authentication failed. Please try refreshing the page or signing in again.'
+    };
   }
 }
 
@@ -104,13 +130,23 @@ export async function verifyUser(request: NextRequest): Promise<AuthResult> {
     const { userId } = await verifyUserToken(request.headers);
     
     if (!userId) {
-      return { authorized: false, userId: null, error: 'No valid user token' };
+      return { 
+        authorized: false, 
+        userId: null, 
+        error: 'No valid user token',
+        userMessage: 'You must be logged in to access this feature.'
+      };
     }
 
     return { authorized: true, userId, error: null };
     
   } catch (error) {
     console.error('User verification error:', error);
-    return { authorized: false, userId: null, error: 'Authentication failed' };
+    return { 
+      authorized: false, 
+      userId: null, 
+      error: 'Authentication failed',
+      userMessage: 'Authentication failed. Please try signing in again.'
+    };
   }
 } 
