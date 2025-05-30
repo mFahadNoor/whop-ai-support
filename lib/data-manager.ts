@@ -156,11 +156,28 @@ interface CachedBotSettings {
   timestamp: Date;
 }
 
+interface ContextMessage {
+  content: string;
+  username: string;
+  timestamp: Date;
+  isBot: boolean;
+}
+
+interface CompanyContext {
+  messages: ContextMessage[];
+  lastUpdated: Date;
+}
+
 export class DataManager {
   private settingsCache = new Map<string, CachedBotSettings>();
   private experienceToCompanyMap = new Map<string, string>();
   private experienceMappedCallback?: (experienceId: string) => void;
   private readonly CACHE_TTL_MS = 30 * 1000; // 30 seconds instead of 5 minutes
+  
+  // Context window storage
+  private contextCache = new Map<string, CompanyContext>();
+  private readonly MAX_CONTEXT_MESSAGES = 25;
+  private readonly CONTEXT_TTL_MS = 60 * 60 * 1000; // 1 hour
 
   constructor() {
     // Set up periodic cleanup
@@ -523,8 +540,20 @@ export class DataManager {
       }
     }
     
-    if (cleanedCount > 0) {
-      logger.debug('Cleaned up expired cache entries', { cleanedCount });
+    // Also cleanup expired context windows
+    let contextCleanedCount = 0;
+    for (const [companyId, context] of this.contextCache.entries()) {
+      if ((now - context.lastUpdated.getTime()) > this.CONTEXT_TTL_MS) {
+        this.contextCache.delete(companyId);
+        contextCleanedCount++;
+      }
+    }
+    
+    if (cleanedCount > 0 || contextCleanedCount > 0) {
+      logger.debug('Cleaned up expired cache entries', { 
+        settingsCleanedCount: cleanedCount,
+        contextCleanedCount: contextCleanedCount
+      });
     }
   }
 
@@ -538,7 +567,14 @@ export class DataManager {
         size: this.experienceToCompanyMap.size,
         mappings: Object.fromEntries(this.experienceToCompanyMap)
       },
-      cacheTtlMs: this.CACHE_TTL_MS
+      contextWindows: {
+        size: this.contextCache.size,
+        companies: Array.from(this.contextCache.keys()),
+        totalMessages: Array.from(this.contextCache.values()).reduce((sum, ctx) => sum + ctx.messages.length, 0),
+        maxMessagesPerCompany: this.MAX_CONTEXT_MESSAGES
+      },
+      cacheTtlMs: this.CACHE_TTL_MS,
+      contextTtlMs: this.CONTEXT_TTL_MS
     };
   }
 
@@ -553,6 +589,91 @@ export class DataManager {
     } catch (error) {
       logger.error('Error disconnecting from database', error as Error);
     }
+  }
+
+  // =============================================================================
+  // CONTEXT WINDOW MANAGEMENT
+  // =============================================================================
+
+  /**
+   * Add a message to the context window for a company
+   */
+  addMessageToContext(companyId: string, content: string, username: string, isBot: boolean = false) {
+    if (!this.contextCache.has(companyId)) {
+      this.contextCache.set(companyId, {
+        messages: [],
+        lastUpdated: new Date()
+      });
+    }
+
+    const context = this.contextCache.get(companyId)!;
+    
+    // Add new message
+    context.messages.push({
+      content: content.substring(0, 500), // Limit message length
+      username,
+      timestamp: new Date(),
+      isBot
+    });
+
+    // Keep only the last MAX_CONTEXT_MESSAGES
+    if (context.messages.length > this.MAX_CONTEXT_MESSAGES) {
+      context.messages = context.messages.slice(-this.MAX_CONTEXT_MESSAGES);
+    }
+
+    context.lastUpdated = new Date();
+
+    logger.debug('Added message to context window', {
+      companyId,
+      username,
+      isBot,
+      totalMessages: context.messages.length,
+      contentPreview: content.substring(0, 50)
+    });
+  }
+
+  /**
+   * Get the context window for a company
+   */
+  getCompanyContext(companyId: string): ContextMessage[] {
+    const context = this.contextCache.get(companyId);
+    if (!context) {
+      return [];
+    }
+
+    // Check if context is still valid
+    const now = Date.now();
+    if ((now - context.lastUpdated.getTime()) > this.CONTEXT_TTL_MS) {
+      this.contextCache.delete(companyId);
+      return [];
+    }
+
+    return [...context.messages]; // Return a copy
+  }
+
+  /**
+   * Get formatted context as a string for AI prompts
+   */
+  getFormattedContext(companyId: string): string {
+    const messages = this.getCompanyContext(companyId);
+    if (messages.length === 0) {
+      return '';
+    }
+
+    const formattedMessages = messages
+      .slice(-10) // Only use last 10 messages for AI context to avoid token limits
+      .map(msg => `${msg.isBot ? 'Bot' : msg.username}: ${msg.content}`)
+      .join('\n');
+
+    return `Recent conversation:\n${formattedMessages}\n\n`;
+  }
+
+  /**
+   * Clear context for a specific company
+   */
+  clearCompanyContext(companyId: string) {
+    this.contextCache.delete(companyId);
+    logger.debug('Cleared context window for company', { companyId });
   }
 }
 

@@ -155,6 +155,7 @@ interface AppConfig {
   // Security & Validation
   MAX_MESSAGE_LENGTH: number;
   MAX_KNOWLEDGE_BASE_SIZE: number;
+  MAX_AI_RESPONSE_TOKENS: number;
 
   // Optional Features
   ENABLE_DB_LOGGING: boolean;
@@ -255,6 +256,7 @@ function loadConfig(): AppConfig {
       // Security
       MAX_MESSAGE_LENGTH: parseEnvInt('MAX_MESSAGE_LENGTH', 2000),
       MAX_KNOWLEDGE_BASE_SIZE: parseEnvInt('MAX_KNOWLEDGE_BASE_SIZE', 1000000), // 1MB
+      MAX_AI_RESPONSE_TOKENS: parseEnvInt('MAX_AI_RESPONSE_TOKENS', 1000),
     };
 
     // Validate configuration
@@ -556,6 +558,7 @@ export function truncateText(text: string, maxLength: number): string {
  * 
  * This function uses multiple indicators to determine if text contains
  * a question, including question marks, question words, and sentence structure.
+ * Made more strict to avoid false positives.
  * 
  * @param text - Text to analyze
  * @returns True if text appears to contain a question
@@ -567,14 +570,33 @@ export function truncateText(text: string, maxLength: number): string {
 export function isQuestion(text: string): boolean {
   const normalizedText = text.toLowerCase().trim();
   
-  // Check for question mark
+  // Must have question mark OR be a clear question pattern
   if (text.includes('?')) return true;
   
-  // Check for question words
-  const questionWords = ['how', 'what', 'when', 'where', 'why', 'who', 'which', 'can', 'could', 'would', 'should', 'is', 'are', 'do', 'does', 'did'];
-  const startsWithQuestion = questionWords.some(word => normalizedText.startsWith(word + ' '));
+  // Very strict question word patterns - must start sentence
+  const strictQuestionPatterns = [
+    /^how (do|can|to|would|should)/,
+    /^what (is|are|do|does|would|should|can)/,
+    /^when (do|does|is|are|will|would|should|can)/,
+    /^where (is|are|do|does|can|should)/,
+    /^why (do|does|is|are|would|should|can)/,
+    /^who (is|are|can|should|would)/,
+    /^which (is|are|do|does|can|should|would)/,
+    /^can (you|i|we|someone)/,
+    /^could (you|i|we|someone)/,
+    /^would (you|it|this|that)/,
+    /^should (i|we|this|that)/,
+    /^is (there|this|that|it)/,
+    /^are (there|these|those|you)/,
+    /^does (this|that|it|anyone)/,
+    /^do (you|i|we|they)/,
+    /^did (you|anyone|this|that)/,
+    /^will (you|this|that|it)/,
+    /^have (you|they|we)/,
+    /^has (anyone|this|that)/
+  ];
   
-  return startsWithQuestion;
+  return strictQuestionPatterns.some(pattern => pattern.test(normalizedText));
 }
 
 /**

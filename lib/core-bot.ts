@@ -82,6 +82,19 @@ class MessageProcessor {
     const messageContent = post.content || post.message;
     const messageId = post.entityId;
     
+    // Debug: Log raw message data to understand Whop's mention formatting
+    if (messageContent && (messageContent.includes('@') || messageContent.includes('AI Support') || messageContent.includes('ai-support'))) {
+      console.log('🐛 DEBUG: Raw message with potential mention', {
+        messageContent,
+        rawContent: JSON.stringify(messageContent),
+        hasAt: messageContent.includes('@'),
+        hasAISupport: messageContent.includes('AI Support'),
+        hasAiSupport: messageContent.includes('ai-support'),
+        messageId,
+        post: JSON.stringify(post, null, 2)
+      });
+    }
+    
     if (!messageId) {
       logger.debug('Message missing entityId, skipping', {
         content: messageContent?.substring(0, 50) || 'N/A',
@@ -279,11 +292,43 @@ class BotCoordinator {
    * Check if message contains @ mention of the bot
    */
   private isBotMentioned(content: string): boolean {
-    if (!BOT_USERNAME) return false;
+    if (!BOT_USERNAME) {
+      console.log('🐛 DEBUG: BOT_USERNAME is null/undefined');
+      return false;
+    }
     
-    // Check for @username (case insensitive)
-    const mentionPattern = new RegExp(`@${BOT_USERNAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-    return mentionPattern.test(content);
+    // Multiple patterns to check for mentions
+    const patterns = [
+      // Standard @username pattern
+      new RegExp(`@${BOT_USERNAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'),
+      // Pattern without word boundary (in case of special formatting)
+      new RegExp(`@${BOT_USERNAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'),
+      // Pattern for "AI Support's agent" format
+      new RegExp(`@AI\\s+Support'?s?\\s+agent`, 'i'),
+      // Pattern for any variation of the bot name
+      new RegExp(`@(AI\\s+Support|ai-support|ai\\s+support)`, 'i'),
+    ];
+    
+    let isMatched = false;
+    let matchedPattern = '';
+    
+    for (const pattern of patterns) {
+      if (pattern.test(content)) {
+        isMatched = true;
+        matchedPattern = pattern.toString();
+        break;
+      }
+    }
+    
+    console.log('🐛 DEBUG: Mention check', {
+      content,
+      botUsername: BOT_USERNAME,
+      patterns: patterns.map(p => p.toString()),
+      matchedPattern,
+      isMatched
+    });
+    
+    return isMatched;
   }
 
   async processChatMessage(message: ProcessedMessage): Promise<void> {
@@ -390,6 +435,16 @@ class BotCoordinator {
     
     // Check if bot is mentioned
     const isMentioned = this.isBotMentioned(message.content);
+    
+    console.log('🐛 DEBUG: Processing message', {
+      content: message.content,
+      username,
+      companyId,
+      isMentioned,
+      settingsEnabled: settings.enabled,
+      hasKnowledgeBase: !!settings.knowledgeBase,
+      hasPresetQA: !!(settings.presetQA && settings.presetQA.length > 0)
+    });
 
     // Handle AI responses
     if (settings.enabled && (settings.knowledgeBase || (settings.presetQA && settings.presetQA.length > 0))) {
@@ -400,6 +455,9 @@ class BotCoordinator {
         isMentioned,
         action: 'ai_check_start',
       });
+      
+      // Add user message to context window
+      dataManager.addMessageToContext(companyId, message.content, username, false);
       
       const aiResponse = await aiEngine.analyzeQuestion(
         message.content, 
@@ -413,6 +471,9 @@ class BotCoordinator {
         const botMessage = `🤖 ${aiResponse}`;
         const success = await whopAPI.sendMessageWithRetry(message.feedId, botMessage);
         if (success) {
+          // Add bot response to context window
+          dataManager.addMessageToContext(companyId, aiResponse, 'AI Support', true);
+          
           logger.info('AI response sent successfully', {
             companyId,
             username,
@@ -433,6 +494,9 @@ class BotCoordinator {
         const fallbackMessage = "🤖 Hi! I'm here to help answer questions. Could you please ask me something specific about this community?";
         const success = await whopAPI.sendMessageWithRetry(message.feedId, fallbackMessage);
         if (success) {
+          // Add fallback response to context window
+          dataManager.addMessageToContext(companyId, fallbackMessage.replace('🤖 ', ''), 'AI Support', true);
+          
           logger.info('Fallback mention response sent', {
             companyId,
             username,
@@ -460,6 +524,9 @@ class BotCoordinator {
         });
       }
       return;
+    } else {
+      // Still add non-bot messages to context even if bot doesn't respond
+      dataManager.addMessageToContext(companyId, message.content, username, false);
     }
 
     logger.debug('Message did not trigger any bot actions', {

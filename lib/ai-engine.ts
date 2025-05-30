@@ -81,37 +81,45 @@ export function createSystemPrompt(knowledgeBase: string, settings: BotSettings,
   systemPrompt += '\n\nGuidelines:';
   
   if (isMentioned) {
-    systemPrompt += '\n- You have been directly mentioned, so you should always provide a helpful response';
-    systemPrompt += '\n- Even if the message isn\'t a clear question, try to be helpful and engaging';
-    systemPrompt += '\n- If someone just says hi or mentions you casually, respond politely and ask how you can help';
+    systemPrompt += '\n- You have been directly mentioned, so you should provide a helpful response';
+    systemPrompt += '\n- If someone mentions you casually, politely redirect them to ask a specific question';
+    systemPrompt += '\n- If they greet you or say hi, respond politely and ask how you can help with this community';
   } else {
-    systemPrompt += '\n- Only respond to clear questions or help requests';
-    systemPrompt += '\n- Do not respond to spam, inappropriate content, or off-topic messages';
+    systemPrompt += '\n- ONLY respond to clear questions that need support or information about this community';
+    systemPrompt += '\n- Do NOT respond to casual conversation, greetings, or off-topic chat between users';
+    systemPrompt += '\n- Focus on questions about the community\'s purpose, features, rules, or how things work';
+    systemPrompt += '\n- If the question isn\'t related to your knowledge base, politely redirect to the appropriate resource';
   }
   
-  systemPrompt += '\n- Keep responses concise and helpful (under 500 characters)';
-  systemPrompt += '\n- Use the community information provided to give accurate answers';
+  systemPrompt += '\n- Keep responses concise and helpful (under 300 characters when possible)';
+  systemPrompt += '\n- Use the community information provided to give accurate, specific answers';
   systemPrompt += '\n- If you don\'t know something, say so instead of guessing';
-  systemPrompt += '\n- Be respectful and inclusive in all responses';
+  systemPrompt += '\n- Be respectful and professional in all responses';
+  systemPrompt += '\n- Avoid responding to messages that don\'t need bot intervention';
 
   return systemPrompt;
 }
 
 export function createQuestionAnalysisPrompt(): string {
-  return `You are an AI assistant that determines if messages require responses. 
+  return `You are an AI assistant that determines if messages require responses from a community support bot.
 
-Respond with "YES" if the message:
-- Contains a clear question (marked by ?, question words like what/how/why/when/where/who)
-- Asks for help, support, or assistance
+Respond with "YES" ONLY if the message:
+- Contains a clear question about the community, service, or topic (marked by ?, or question words like what/how/why/when/where/who)
+- Asks for help, support, technical assistance, or guidance
 - Reports a problem or issue that needs addressing
-- Requests information or clarification
+- Requests specific information, clarification, or instructions
+- Asks about features, functionality, or how something works
 
 Respond with "NO" if the message:
-- Is just a statement or comment
-- Contains only greetings or casual chat
-- Is spam, nonsense, or inappropriate
-- Is too short or unclear to understand
-- Contains only emojis or reactions
+- Is casual conversation between users (greetings, small talk, "wassup", "how's it going")
+- Contains only statements, comments, or personal updates
+- Is off-topic chatter not related to the community's purpose
+- Is spam, nonsense, inappropriate, or unclear content
+- Contains only emojis, reactions, or very short responses
+- Is users talking to each other about unrelated topics
+- Is social conversation that doesn't need bot intervention
+
+The bot should ONLY respond to questions that actually need support or information, not casual chat.
 
 Analyze this message and respond with only "YES" or "NO":`;
 }
@@ -275,7 +283,7 @@ export class AIEngine {
       }
 
       // Generate AI response
-      const aiResponse = await this.generateAIResponse(truncatedMessage, knowledgeBase, settings, isMentioned);
+      const aiResponse = await this.generateAIResponse(truncatedMessage, knowledgeBase, settings, companyId, isMentioned);
       if (aiResponse) {
         // Cache the response
         this.cacheResponse(cacheKey, aiResponse);
@@ -377,10 +385,15 @@ export class AIEngine {
     message: string, 
     knowledgeBase: string, 
     settings: BotSettings,
+    companyId: string,
     isMentioned: boolean
   ): Promise<string | null> {
     try {
       const systemPrompt = createSystemPrompt(knowledgeBase, settings, isMentioned);
+      
+      // Get conversation context
+      const { dataManager } = await import('./data-manager');
+      const context = dataManager.getFormattedContext(companyId);
 
       const response = await retry(async () => {
         return await this.openai.chat.completions.create({
@@ -392,29 +405,16 @@ export class AIEngine {
             },
             {
               role: 'user',
-              content: message
+              content: context + message
             }
           ],
-          max_tokens: 200,
+          max_tokens: config.MAX_AI_RESPONSE_TOKENS,
           temperature: 0.7,
         });
       });
 
       const aiResponse = response.choices[0]?.message?.content?.trim();
-      
-      if (!aiResponse) {
-        logger.warn('AI response was empty');
-        return null;
-      }
-
-      // Sanitize and validate response
-      const cleanResponse = sanitizeText(aiResponse);
-      if (cleanResponse.length < 10) {
-        logger.warn('AI response too short', { response: cleanResponse });
-        return null;
-      }
-
-      return cleanResponse;
+      return aiResponse || null;
 
     } catch (error) {
       logger.error('Error generating AI response', error as Error, { messagePreview: message.substring(0, 50) });

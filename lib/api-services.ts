@@ -25,6 +25,7 @@
 
 import crypto from 'crypto';
 import { config, logger, retry } from './shared-utils';
+import { WhopAPI } from '@whop-apps/sdk';
 
 // =============================================================================
 // WHOP API WRAPPER
@@ -263,22 +264,38 @@ class WhopAPIService {
    */
   async getUser(userId: string): Promise<any> {
     try {
-      const response = await retry(async () => {
-        return await fetch(`${this.baseURL}/users/${userId}`, {
-          headers: {
-            'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
-          },
-        });
+      // Use the official Whop SDK to get user information
+      const response = await WhopAPI.app().GET("/app/users/{id}", {
+        params: { path: { id: userId } }
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      
+      if (response.data) {
+        return response.data;
       }
-
-      return await response.json();
-    } catch (error) {
-      logger.error('Failed to fetch user info', error as Error, { userId });
       return null;
+    } catch (error) {
+      logger.error('Failed to fetch user info via SDK', error as Error, { userId });
+      
+      // Fallback to direct API call if SDK fails
+      try {
+        const fallbackResponse = await retry(async () => {
+          return await fetch(`${this.baseURL}/users/${userId}`, {
+            headers: {
+              'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
+            },
+          });
+        });
+
+        if (!fallbackResponse.ok) {
+          throw new Error(`HTTP ${fallbackResponse.status}: ${fallbackResponse.statusText}`);
+        }
+
+        const userData = await fallbackResponse.json();
+        return userData;
+      } catch (fallbackError) {
+        logger.error('Failed to fetch user info via fallback API', fallbackError as Error, { userId });
+        return null;
+      }
     }
   }
 

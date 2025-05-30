@@ -19,7 +19,7 @@
 		"@shadcn/ui": "^0.0.4",
 		"@types/ws": "^8.18.1",
 		"@vercel/functions": "^2.0.3",
-		"@whop-apps/sdk": "0.0.1-canary.111",
+		"@whop-apps/sdk": "^0.0.1-canary.111",
 		"@whop/api": "^0.0.21-canary.3",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
