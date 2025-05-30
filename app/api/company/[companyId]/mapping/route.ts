@@ -48,16 +48,15 @@ export async function GET(
   try {
     const { companyId } = await params;
     
-    // Get all mappings for this company
+    // Get all mappings for this company using the new method
+    const mappingsForCompany = dataManager.getAllMappingsForCompany(companyId);
     const stats = dataManager.getStats();
-    const mappingsForCompany = Object.entries(stats.experienceMappings.mappings)
-      .filter(([_, mappedCompanyId]) => mappedCompanyId === companyId)
-      .map(([experienceId, mappedCompanyId]) => ({ experienceId, companyId: mappedCompanyId }));
     
     return NextResponse.json({
       companyId,
       mappings: mappingsForCompany,
-      totalMappings: mappingsForCompany.length
+      totalMappings: mappingsForCompany.length,
+      totalSystemMappings: stats.experienceMappings
     });
     
   } catch (error) {

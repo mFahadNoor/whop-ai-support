@@ -650,6 +650,30 @@ export class DataManager {
     }
     return null;
   }
+
+  /**
+   * Get all experience mappings for a specific company
+   */
+  getAllMappingsForCompany(companyId: string): Array<{ experienceId: string; companyId: string }> {
+    const mappings: Array<{ experienceId: string; companyId: string }> = [];
+    for (const [experienceId, mappedCompanyId] of this.experienceToCompanyMap.entries()) {
+      if (mappedCompanyId === companyId) {
+        mappings.push({ experienceId, companyId: mappedCompanyId });
+      }
+    }
+    return mappings;
+  }
+
+  /**
+   * Get all experience mappings
+   */
+  getAllMappings(): Array<{ experienceId: string; companyId: string }> {
+    const mappings: Array<{ experienceId: string; companyId: string }> = [];
+    for (const [experienceId, companyId] of this.experienceToCompanyMap.entries()) {
+      mappings.push({ experienceId, companyId });
+    }
+    return mappings;
+  }
 }
 
 // Create and export singleton instance
