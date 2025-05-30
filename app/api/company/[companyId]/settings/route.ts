@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dataManager, isValidBotSettings } from '@/lib/data-manager';
-import { verifyUserToken } from '@whop/api';
+import { verifyCompanyAdminAccess } from '@/lib/auth-utils';
 
 const defaultSettings = {
   enabled: false,
@@ -14,33 +14,6 @@ const defaultSettings = {
   autoResponse: true,
   responseDelay: 1
 };
-
-// Helper function to verify user has admin access to company
-async function verifyCompanyAdminAccess(request: NextRequest, companyId: string) {
-  try {
-    // Verify user token
-    const { userId } = await verifyUserToken(request.headers);
-    
-    if (!userId) {
-      return { authorized: false, userId: null, error: 'No valid user token' };
-    }
-
-    // For now, we'll allow any authenticated user to access the bot settings
-    // TODO: In production, you should verify the user is an admin/owner of the specific company
-    // This can be done by checking:
-    // 1. If the user owns the company
-    // 2. If the user has admin role in the experience associated with this company
-    // 3. If the user is in a list of authorized administrators
-    
-    console.log(`User ${userId} accessing settings for company ${companyId}`);
-    
-    return { authorized: true, userId, error: null };
-    
-  } catch (error) {
-    console.error('Authentication error:', error);
-    return { authorized: false, userId: null, error: 'Authentication failed' };
-  }
-}
 
 export async function GET(
   request: NextRequest,

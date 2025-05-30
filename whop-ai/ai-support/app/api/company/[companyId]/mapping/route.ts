@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { dataManager } from '@/lib/data-manager';
 import { logger } from '@/lib/shared-utils';
-import { verifyCompanyAdminAccess } from '@/lib/auth-utils';
 
 export async function POST(
   request: NextRequest,
@@ -9,16 +8,6 @@ export async function POST(
 ) {
   try {
     const { companyId } = await params;
-    
-    // Verify authentication and authorization
-    const auth = await verifyCompanyAdminAccess(request, companyId);
-    if (!auth.authorized) {
-      return NextResponse.json(
-        { error: 'Unauthorized: ' + auth.error },
-        { status: 401 }
-      );
-    }
-    
     const { experienceId } = await request.json();
     
     if (!experienceId) {
@@ -31,7 +20,6 @@ export async function POST(
     logger.info('Manual experience mapping request', {
       companyId,
       experienceId,
-      userId: auth.userId,
       action: 'manual_mapping_request'
     });
     
@@ -41,8 +29,7 @@ export async function POST(
     return NextResponse.json({ 
       success: true,
       message: `Mapped experience ${experienceId} to company ${companyId}`,
-      mapping: { experienceId, companyId },
-      createdBy: auth.userId
+      mapping: { experienceId, companyId }
     });
     
   } catch (error) {
@@ -61,25 +48,16 @@ export async function GET(
   try {
     const { companyId } = await params;
     
-    // Verify authentication and authorization
-    const auth = await verifyCompanyAdminAccess(request, companyId);
-    if (!auth.authorized) {
-      return NextResponse.json(
-        { error: 'Unauthorized: ' + auth.error },
-        { status: 401 }
-      );
-    }
-    
-    // Get all mappings for this company using the new method
-    const mappingsForCompany = dataManager.getAllMappingsForCompany(companyId);
+    // Get all mappings for this company
     const stats = dataManager.getStats();
+    const mappingsForCompany = Object.entries(stats.experienceMappings.mappings)
+      .filter(([_, mappedCompanyId]) => mappedCompanyId === companyId)
+      .map(([experienceId, mappedCompanyId]) => ({ experienceId, companyId: mappedCompanyId }));
     
     return NextResponse.json({
       companyId,
       mappings: mappingsForCompany,
-      totalMappings: mappingsForCompany.length,
-      totalSystemMappings: stats.experienceMappings,
-      requestedBy: auth.userId
+      totalMappings: mappingsForCompany.length
     });
     
   } catch (error) {
@@ -89,5 +67,4 @@ export async function GET(
       { status: 500 }
     );
   }
-}
-
+} 
