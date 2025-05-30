@@ -190,11 +190,18 @@ export default function ClientPage({ companyId, isAuthorized, userId }: ClientPa
         const data = await response.json();
         setSettings(data.settings || settings);
       } else {
-        setMessage('Failed to load settings');
+        // Parse the error response to get the detailed error message
+        try {
+          const errorData = await response.json();
+          setMessage(errorData.error || 'Failed to load settings');
+        } catch (parseError) {
+          // If we can't parse the error response, show a generic message
+          setMessage('Failed to load settings');
+        }
       }
     } catch (error) {
       console.error('Failed to load settings:', error);
-      setMessage('Error loading settings');
+      setMessage('Unable to connect to the server. Please check your internet connection and try again.');
     }
     setLoading(false);
   };
@@ -213,11 +220,23 @@ export default function ClientPage({ companyId, isAuthorized, userId }: ClientPa
         setMessage('Settings saved successfully!');
         setTimeout(() => setMessage(''), 3000);
       } else {
-        const data = await response.json();
-        setMessage(data.error || 'Failed to save settings');
+        // Parse the error response to get the detailed error message
+        try {
+          const errorData = await response.json();
+          setMessage(errorData.error || 'Failed to save settings');
+        } catch (parseError) {
+          // If we can't parse the error response, show a generic message based on status
+          if (response.status === 401) {
+            setMessage('You don\'t have permission to save settings for this company.');
+          } else if (response.status === 403) {
+            setMessage('Access denied. Please check your permissions.');
+          } else {
+            setMessage('Failed to save settings');
+          }
+        }
       }
     } catch (error) {
-      setMessage('Error saving settings');
+      setMessage('Unable to save settings. Please check your internet connection and try again.');
       console.error('Save error:', error);
     }
     setLoading(false);
