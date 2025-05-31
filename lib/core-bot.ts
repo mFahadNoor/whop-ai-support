@@ -421,6 +421,24 @@ class BotCoordinator {
     const messageLower = message.content.toLowerCase();
     const username = message.user.username || message.user.name || 'Unknown';
     
+    // Check for admin commands (only for @script user)
+    if (username === 'script' && message.content.trim() === '!clct') {
+      // Clear context command - admin only
+      dataManager.clearCompanyContext(companyId);
+      const adminResponse = '@script done, cleared context.';
+      const messageId = await whopAPI.sendMessageWithRetry(message.feedId, adminResponse);
+      if (messageId) {
+        dataManager.trackBotMessage(messageId);
+        logger.info('Admin command executed: clear context', {
+          companyId,
+          username,
+          command: '!clct',
+          action: 'admin_clear_context',
+        });
+      }
+      return;
+    }
+    
     // Check if bot is mentioned
     const isMentioned = this.isBotMentioned(message.content);
     

@@ -67,35 +67,76 @@ export function createSystemPrompt(knowledgeBase: string, settings: BotSettings,
       systemPrompt = 'You are a helpful AI assistant for a community support system.';
   }
 
-  // Add knowledge base
+  // Add bot role clarification
+  systemPrompt += '\n\n🤖 CRITICAL ROLE UNDERSTANDING:';
+  systemPrompt += '\n- You are an AI assistant bot created by the community owners/creators to help their members';
+  systemPrompt += '\n- You do NOT own this community - you are a helpful assistant working FOR the community creators';
+  systemPrompt += '\n- When the knowledge base uses "my", "I", "me", or "mine" - these refer to the COMMUNITY CREATORS, NOT YOU';
+  systemPrompt += '\n- You should say "the creator\'s" or "this community\'s" instead of "my" when referring to ownership';
+  systemPrompt += '\n- NEVER claim ownership of the community - always refer to it as belonging to the creators/owners';
+  systemPrompt += '\n- You are sharing information ON BEHALF OF the creators, not as the owner yourself';
+
+  // Add knowledge base with strict instructions
   if (knowledgeBase && knowledgeBase.trim()) {
-    systemPrompt += '\n\nHere is important information about this community:\n' + knowledgeBase.trim();
+    systemPrompt += '\n\n=== COMMUNITY KNOWLEDGE BASE ===';
+    systemPrompt += '\n(This information was provided by the community creators/owners for you to share with members)';
+    systemPrompt += '\n' + knowledgeBase.trim();
+    systemPrompt += '\n=== END OF KNOWLEDGE BASE ===';
+    
+    systemPrompt += '\n\n📝 IMPORTANT: When sharing this information, rephrase ownership statements:';
+    systemPrompt += '\n- Instead of "This is my personal whop" → say "This is the creator\'s personal whop"';
+    systemPrompt += '\n- Instead of "my friends and family" → say "the creator\'s friends and family"';
+    systemPrompt += '\n- Instead of "I created this" → say "the creator created this"';
+    systemPrompt += '\n- Always make it clear you are an assistant sharing the creator\'s information';
   }
 
   // Add custom instructions
   if (settings.customInstructions && settings.customInstructions.trim()) {
-    systemPrompt += '\n\nAdditional instructions:\n' + settings.customInstructions.trim();
+    systemPrompt += '\n\nAdditional instructions from the community creators:\n' + settings.customInstructions.trim();
   }
 
-  // Add response guidelines
-  systemPrompt += '\n\nGuidelines:';
+  // Add ULTRA-STRICT response guidelines
+  systemPrompt += '\n\n🚨 ULTRA-STRICT RULES - FOLLOW EXACTLY OR DO NOT RESPOND:';
   
   if (shouldForceResponse) {
-    systemPrompt += '\n- You have been directly mentioned or someone replied to your message, so you should provide a helpful response';
-    systemPrompt += '\n- If someone mentions you casually or replies with casual conversation, politely redirect them to ask a specific question';
+    systemPrompt += '\n- You have been directly mentioned or someone replied to your message';
+    systemPrompt += '\n- If they ask a question you cannot answer from the knowledge base, say: "I don\'t have specific information about that in my knowledge base. Please contact the community administrators for help."';
     systemPrompt += '\n- If they greet you or say hi, respond politely and ask how you can help with this community';
+    systemPrompt += '\n- STILL follow all knowledge base restrictions below even when forced to respond';
   } else {
-    systemPrompt += '\n- ONLY respond to clear questions that need support or information about this community';
+    systemPrompt += '\n- ONLY respond if you can answer the question with 100% CERTAINTY using ONLY the knowledge base';
+    systemPrompt += '\n- If there is ANY doubt, contradiction, or missing information - DO NOT RESPOND AT ALL';
+    systemPrompt += '\n- If you cannot answer the question based EXCLUSIVELY on your knowledge base, DO NOT respond at all';
+    systemPrompt += '\n- NEVER say "sorry I can\'t help" or similar - just don\'t respond if you can\'t help';
     systemPrompt += '\n- Do NOT respond to casual conversation, greetings, or off-topic chat between users';
-    systemPrompt += '\n- Focus on questions about the community\'s purpose, features, rules, or how things work';
-    systemPrompt += '\n- If the question isn\'t related to your knowledge base, politely redirect to the appropriate resource';
   }
   
+  // ULTRA-STRICT knowledge base enforcement
+  systemPrompt += '\n\n🔒 KNOWLEDGE BASE RESTRICTIONS - ABSOLUTELY CRITICAL:';
+  systemPrompt += '\n- You can ONLY use information that is EXPLICITLY and CLEARLY written in the knowledge base above';
+  systemPrompt += '\n- If there are ANY contradictions in the knowledge base (different numbers, conflicting info), DO NOT respond at all';
+  systemPrompt += '\n- NEVER make assumptions, add details, or infer information not directly stated';
+  systemPrompt += '\n- NEVER mention products, services, or concepts not explicitly mentioned in the knowledge base';
+  systemPrompt += '\n- If the knowledge base doesn\'t contain the EXACT answer to the question, DO NOT respond at all';
+  systemPrompt += '\n- Do NOT combine or extrapolate from knowledge base information';
+  systemPrompt += '\n- Stick to the EXACT facts and numbers provided - if numbers conflict, don\'t respond';
+  systemPrompt += '\n- If you detect any inconsistency or contradiction in the knowledge base, DO NOT respond';
+  
+  // Add contradiction detection
+  systemPrompt += '\n\n⚠️ CONTRADICTION DETECTION:';
+  systemPrompt += '\n- Before responding, check if the knowledge base contains conflicting information';
+  systemPrompt += '\n- Look for different numbers, requirements, or rules that contradict each other';
+  systemPrompt += '\n- If you find ANY contradictory information, DO NOT respond - the knowledge base needs to be cleaned up first';
+  systemPrompt += '\n- Only respond if the information is crystal clear and consistent';
+  
+  systemPrompt += '\n\n📝 RESPONSE GUIDELINES:';
   systemPrompt += '\n- Keep responses concise and helpful (under 300 characters when possible)';
-  systemPrompt += '\n- Use the community information provided to give accurate, specific answers';
-  systemPrompt += '\n- If you don\'t know something, say so instead of guessing';
+  systemPrompt += '\n- Quote or paraphrase ONLY from the knowledge base provided';
+  systemPrompt += '\n- Use EXACT numbers and facts from the knowledge base - no approximations';
+  systemPrompt += '\n- If you don\'t know something from the knowledge base, don\'t respond rather than guessing';
   systemPrompt += '\n- Be respectful and professional in all responses';
-  systemPrompt += '\n- Avoid responding to messages that don\'t need bot intervention';
+  systemPrompt += '\n- Never hallucinate or make up information';
+  systemPrompt += '\n- When referring to the community, remember it belongs to the creators, not you';
 
   return systemPrompt;
 }
@@ -103,23 +144,32 @@ export function createSystemPrompt(knowledgeBase: string, settings: BotSettings,
 export function createQuestionAnalysisPrompt(): string {
   return `You are an AI assistant that determines if messages require responses from a community support bot.
 
+The bot can ONLY answer questions using information from a specific community knowledge base. It MUST NOT respond unless it has 100% certainty it can answer correctly.
+
 Respond with "YES" ONLY if the message:
-- Contains a clear question about the community, service, or topic (marked by ?, or question words like what/how/why/when/where/who)
-- Asks for help, support, technical assistance, or guidance
-- Reports a problem or issue that needs addressing
-- Requests specific information, clarification, or instructions
-- Asks about features, functionality, or how something works
+- Contains a very specific, clear question about community requirements, processes, or rules
+- Asks for exact numbers, thresholds, or specific criteria (like "how many views needed?")
+- Requests specific information about submission requirements, approval processes, or technical specifications
+- Reports a specific problem that needs addressing within the community
+- Asks "how to" do something very specific within the community
 
 Respond with "NO" if the message:
-- Is casual conversation between users (greetings, small talk, "wassup", "how's it going")
-- Contains only statements, comments, or personal updates
+- Is casual conversation between users (greetings, small talk, "wassup", "how's it going", "hey guys")
+- Contains only statements, comments, or personal updates  
 - Is off-topic chatter not related to the community's purpose
 - Is spam, nonsense, inappropriate, or unclear content
 - Contains only emojis, reactions, or very short responses
 - Is users talking to each other about unrelated topics
 - Is social conversation that doesn't need bot intervention
+- Asks about things completely unrelated to the community (general life questions, other topics)
+- Asks VAGUE or BROAD questions like "what are the rules?" or "tell me about this place" (too general)
+- Asks for information that would require general knowledge rather than community-specific knowledge
+- Is a question that's too open-ended or would require the bot to make assumptions
+- Asks about technical issues, platform features, or account linking that require admin/platform support
+- Contains questions that clearly cannot be answered from a community knowledge base
+- Asks for help that requires human judgment or interpretation
 
-The bot should ONLY respond to questions that actually need support or information, not casual chat.
+IMPORTANT: Only respond "YES" if you are 99% certain the question can be answered with specific, factual information from a community knowledge base. When in doubt, respond "NO". Err on the side of NOT responding rather than guessing.
 
 Analyze this message and respond with only "YES" or "NO":`;
 }
@@ -200,6 +250,65 @@ export class AIEngine {
   }
 
   /**
+   * Check if knowledge base contains contradictory information
+   */
+  private hasContradictions(knowledgeBase: string): boolean {
+    if (!knowledgeBase || knowledgeBase.trim().length === 0) {
+      return false;
+    }
+
+    const text = knowledgeBase.toLowerCase();
+    
+    // Generic approach: Look for multiple different numbers in the same context
+    // This will work for any community, not just one specific type
+    const sentences = text.split(/[.!?\n]/);
+    const numbersInContext = new Map<string, number[]>();
+    
+    // Extract numbers with their context words
+    for (const sentence of sentences) {
+      const trimmedSentence = sentence.trim();
+      if (trimmedSentence.length < 5) continue;
+      
+      // Look for numbers followed by common units/contexts
+      const numberMatches = trimmedSentence.match(/(\d+(?:k|,\d{3})*)\s*([a-z]+)/gi);
+      
+      if (numberMatches && numberMatches.length > 0) {
+        for (const match of numberMatches) {
+          const parts = match.match(/(\d+(?:k|,\d{3})*)\s*([a-z]+)/i);
+          if (parts) {
+            let num = parseInt(parts[1].replace(/[k,]/g, ''));
+            if (parts[1].includes('k')) {
+              num = num * 1000;
+            }
+            
+            const context = parts[2].toLowerCase();
+            
+            if (!numbersInContext.has(context)) {
+              numbersInContext.set(context, []);
+            }
+            numbersInContext.get(context)!.push(num);
+          }
+        }
+      }
+    }
+    
+    // Check for contradictions within the same context
+    for (const [context, numbers] of numbersInContext.entries()) {
+      const uniqueNumbers = [...new Set(numbers)];
+      if (uniqueNumbers.length > 1) {
+        logger.warn('Knowledge base contradiction detected', {
+          context,
+          conflictingNumbers: uniqueNumbers,
+          knowledgeBase: knowledgeBase.substring(0, 200)
+        });
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
    * Analyze if a message requires an AI response and generate one if needed
    */
   async analyzeQuestion(
@@ -260,6 +369,21 @@ export class AIEngine {
           });
           return null;
         }
+      }
+
+      // Check for contradictions in knowledge base before generating response
+      if (knowledgeBase && this.hasContradictions(knowledgeBase)) {
+        logger.warn('Knowledge base has contradictions - not responding', {
+          companyId,
+          messagePreview: truncatedMessage.substring(0, 50)
+        });
+        
+        // If forced to respond (mentioned), provide a helpful message
+        if (shouldForceResponse && username) {
+          return `@${username} I noticed there's conflicting information in my knowledge base. Please contact the community administrators to clarify the requirements.`;
+        }
+        
+        return null;
       }
 
       // Generate AI response
@@ -401,8 +525,36 @@ export class AIEngine {
 
       let aiResponse = response.choices[0]?.message?.content?.trim();
       
+      // Filter out "sorry" type responses - treat them as no response
+      if (aiResponse) {
+        const responseLower = aiResponse.toLowerCase();
+        const sorryPatterns = [
+          'sorry',
+          'can\'t help',
+          'cannot help',
+          'unable to help',
+          'don\'t have information',
+          'not related to',
+          'unrelated to',
+          'off-topic',
+          'not relevant',
+          'outside my knowledge',
+          'beyond my scope'
+        ];
+        
+        // If the response contains any "sorry" patterns, treat it as no response
+        if (sorryPatterns.some(pattern => responseLower.includes(pattern))) {
+          logger.debug('Filtered out "sorry" type response', {
+            companyId,
+            messagePreview: message.substring(0, 50),
+            filteredResponse: aiResponse.substring(0, 100)
+          });
+          return null;
+        }
+      }
+      
       // Add username mention if provided and not already included
-      if (aiResponse && username && shouldForceResponse && !aiResponse.includes(`@${username}`)) {
+      if (aiResponse && username && !aiResponse.includes(`@${username}`)) {
         aiResponse = `@${username} ${aiResponse}`;
       }
       

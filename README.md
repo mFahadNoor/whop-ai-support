@@ -21,24 +21,14 @@ Transform your Whop community with an AI-powered support bot that:
 
 ## 🚀 Key Features
 
-### Smart AI Processing
-- **Question filtering**: Only processes messages with "?" or question words
-- **Response caching**: 30-second cache prevents duplicate AI calls
-- **Preset Q&A**: Instant answers for common questions
-- **Multiple AI models**: Support for Claude, GPT-4, and others via OpenRouter
-
-### Admin Experience
-- **Beautiful dashboard**: Modern, responsive configuration interface
-- **Real-time settings**: Changes take effect immediately
-- **Secure access**: Only Whop company admins can modify settings
+- **Smart question detection**: Only responds to actual questions and support requests
+- **Preset Q&A system**: Instant responses for common questions
+- **AI-powered responses**: Context-aware answers using company knowledge base
+- **Rate limiting**: Prevents API quota exhaustion (10 requests/minute per company)
 - **Multiple response styles**: Professional, friendly, casual, technical, or custom
-
-### Production Features
-- **Rate limiting**: Prevents API abuse and quota exhaustion
-- **Auto-reconnection**: WebSocket connection management with exponential backoff
-- **Database persistence**: PostgreSQL backend with Prisma ORM
-- **Health monitoring**: Built-in maintenance and cleanup routines
-- **Graceful degradation**: Continues working even if services are temporarily unavailable
+- **User mentions**: Always mentions the user being responded to
+- **Context awareness**: Maintains conversation context for better responses
+- **Admin controls**: Easy management through the Dashboard
 
 ## 💡 Cost Savings
 
