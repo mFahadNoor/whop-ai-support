@@ -136,7 +136,7 @@ interface AppConfig {
   OPENROUTER_MODEL: string;
 
   // Whop Configuration
-  WHOP_APP_API_KEY: string;
+  WHOP_API_KEY: string;
   WHOP_AGENT_USER_ID?: string;
   WHOP_APP_ID?: string;
 
@@ -237,7 +237,7 @@ function loadConfig(): AppConfig {
       ENABLE_DB_LOGGING: parseEnvBool('ENABLE_DB_LOGGING', true),
       
       // Whop API
-      WHOP_APP_API_KEY: getRequiredEnv('WHOP_APP_API_KEY'),
+      WHOP_API_KEY: getRequiredEnv('WHOP_API_KEY'),
       WHOP_AGENT_USER_ID: getOptionalEnv('WHOP_AGENT_USER_ID'),
       WHOP_APP_ID: getOptionalEnv('WHOP_APP_ID'),
       
@@ -276,8 +276,8 @@ function validateConfig(config: AppConfig): void {
   const warnings: string[] = [];
 
   // Validate required fields
-  if (!config.WHOP_APP_API_KEY) {
-    errors.push('WHOP_APP_API_KEY is required');
+  if (!config.WHOP_API_KEY) {
+    errors.push('WHOP_API_KEY is required');
   }
   
   if (!config.OPENROUTER_API_KEY) {

@@ -43,7 +43,7 @@ import { aiEngine } from './ai-engine';
 import { whopAPI } from './api-services';
 import { logger } from './shared-utils';
 
-const WHOP_APP_API_KEY = process.env.WHOP_APP_API_KEY;
+const WHOP_API_KEY = process.env.WHOP_API_KEY;
 const WHOP_AGENT_USER_ID = process.env.WHOP_AGENT_USER_ID;
 
 // Bot username for @ mention detection
@@ -676,8 +676,8 @@ class BotWebSocket {
   async start() {
     const uri = "wss://ws-prod.whop.com/ws/developer";
 
-    if (!WHOP_APP_API_KEY) {
-      console.error("❌ WHOP_APP_API_KEY environment variable is not set. Bot cannot start.");
+    if (!WHOP_API_KEY) {
+      console.error("❌ WHOP_API_KEY environment variable is not set. Bot cannot start.");
       return;
     }
     if (!WHOP_AGENT_USER_ID) {
@@ -693,8 +693,8 @@ class BotWebSocket {
   }
 
   private connect(uri: string) {
-    if (!WHOP_APP_API_KEY) {
-      console.error("WHOP_APP_API_KEY is not defined, WebSocket cannot connect.");
+    if (!WHOP_API_KEY) {
+      console.error("WHOP_API_KEY is not defined, WebSocket cannot connect.");
       return;
     }
     
@@ -702,8 +702,8 @@ class BotWebSocket {
     
     // Headers for WebSocket connection
     const wsApiHeaders: { [key: string]: string } = {};
-    if (WHOP_APP_API_KEY) {
-      wsApiHeaders["Authorization"] = `Bearer ${WHOP_APP_API_KEY}`;
+    if (WHOP_API_KEY) {
+      wsApiHeaders["Authorization"] = `Bearer ${WHOP_API_KEY}`;
     }
     if (WHOP_AGENT_USER_ID) {
       wsApiHeaders["x-on-behalf-of"] = WHOP_AGENT_USER_ID;

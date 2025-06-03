@@ -9,7 +9,7 @@ export const whopApi = {
       // Use the real Whop API to check user access
       const response = await fetch(`https://api.whop.com/api/v5/companies/${companyId}/members/${userId}`, {
         headers: {
-          'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
+          'Authorization': `Bearer ${config.WHOP_API_KEY}`,
           'Content-Type': 'application/json',
         },
       });
@@ -51,7 +51,7 @@ export const whopApi = {
     try {
       const response = await fetch(`https://api.whop.com/api/v5/users/${userId}`, {
         headers: {
-          'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
+          'Authorization': `Bearer ${config.WHOP_API_KEY}`,
           'Content-Type': 'application/json',
         },
       });

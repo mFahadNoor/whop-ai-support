@@ -81,7 +81,7 @@ class WhopAPIService {
       // Use GraphQL for sending messages to Whop
       const result = await retry(async () => {
         const headers: Record<string, string> = {
-          'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
+          'Authorization': `Bearer ${config.WHOP_API_KEY}`,
           'Content-Type': 'application/json',
         };
 
@@ -203,7 +203,7 @@ class WhopAPIService {
       const response = await retry(async () => {
         return await fetch(`${this.baseURL}/companies/${companyId}`, {
           headers: {
-            'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
+            'Authorization': `Bearer ${config.WHOP_API_KEY}`,
           },
         });
       });
@@ -227,7 +227,7 @@ class WhopAPIService {
       const response = await retry(async () => {
         return await fetch(`${this.baseURL}/experiences/${experienceId}`, {
           headers: {
-            'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
+            'Authorization': `Bearer ${config.WHOP_API_KEY}`,
           },
         });
       });
@@ -251,7 +251,7 @@ class WhopAPIService {
       const response = await retry(async () => {
         return await fetch('https://api.whop.com/v5/app/experiences', {
           headers: {
-            'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
+            'Authorization': `Bearer ${config.WHOP_API_KEY}`,
           },
         });
       });
@@ -310,7 +310,7 @@ class WhopAPIService {
       const response = await retry(async () => {
         return await fetch(`${this.baseURL}/posts/feed/${feedId}`, {
           headers: {
-            'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
+            'Authorization': `Bearer ${config.WHOP_API_KEY}`,
           },
         });
       });
@@ -334,7 +334,7 @@ class WhopAPIService {
       const response = await retry(async () => {
         return await fetch(`${this.baseURL}/posts/feed/${feedId}?limit=${Math.min(limit, 50)}`, {
           headers: {
-            'Authorization': `Bearer ${config.WHOP_APP_API_KEY}`,
+            'Authorization': `Bearer ${config.WHOP_API_KEY}`,
           },
         });
       });
