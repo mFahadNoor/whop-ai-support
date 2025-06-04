@@ -515,35 +515,16 @@ class BotCoordinator {
             action: 'ai_response_failed',
           });
         }
-      } else if (shouldForceResponse) {
-        // If bot was mentioned or someone replied to bot with a question, send a fallback message
-        const fallbackMessage = shouldForceResponseForReply 
-          ? `@${username} Thanks for replying! Could you please ask me a more specific question about this community?`
-          : `@${username} Hi! I'm here to help answer questions. Could you please ask me something specific about this community?`;
-        const messageId = await whopAPI.sendMessageWithRetry(message.feedId, fallbackMessage);
-        if (messageId) {
-          // Track the fallback message ID too
-          dataManager.trackBotMessage(messageId);
-          
-          // Add fallback response to context window
-          dataManager.addMessageToContext(companyId, fallbackMessage.replace('🤖 ', ''), 'AI Support', true);
-          
-          logger.info('Fallback response sent', {
-            companyId,
-            username,
-            isMentioned,
-            isReplyingToBotMessage,
-            shouldForceResponseForReply,
-            botMessageId: messageId,
-            action: 'fallback_response_sent',
-          });
-        }
       } else {
-        logger.debug('AI decided not to respond', {
+        // Bot was mentioned/replied to but AI decided not to respond - this is correct behavior
+        logger.debug('Bot was mentioned but AI decided not to respond (no suitable answer)', {
           companyId,
           username,
           messagePreview: message.content.substring(0, 50),
-          action: 'ai_no_response',
+          wasMentioned: isMentioned,
+          wasReplyingToBotMessage: isReplyingToBotMessage,
+          shouldForceResponseForReply,
+          action: 'mentioned_but_no_response',
         });
       }
       return;

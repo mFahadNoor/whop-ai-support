@@ -77,19 +77,22 @@ export function createSystemPrompt(knowledgeBase: string, settings: BotSettings,
     systemPrompt += '\n\nAdditional Instructions:\n' + settings.customInstructions.trim();
   }
 
-  // Simple, clear rules
-  systemPrompt += '\n\nRules:';
-  
+  // Much stricter rules
   if (shouldForceResponse) {
-    systemPrompt += '\n- Answer the user\'s question if you can from the community information above';
-    systemPrompt += '\n- If you cannot answer from the community info, say "I don\'t have that information. Please contact the community admins."';
-    systemPrompt += '\n- Keep responses under 200 words';
+    systemPrompt += '\n\nIMPORTANT: You have been mentioned or someone replied to your message.';
+    systemPrompt += '\n- If you can answer their question using ONLY the community information above, provide a helpful answer';
+    systemPrompt += '\n- If you CANNOT answer from the community information, DO NOT RESPOND AT ALL';
+    systemPrompt += '\n- Do NOT make up information or guess';
   } else {
-    systemPrompt += '\n- Only respond if you can answer the question using the community information above';
-    systemPrompt += '\n- If you cannot answer from the community information, do not respond at all';
-    systemPrompt += '\n- Keep responses under 200 words and be helpful';
-    systemPrompt += '\n- Do not respond to casual conversation or greetings';
+    systemPrompt += '\n\nCRITICAL: Only respond if you can answer the question using ONLY the community information provided above.';
+    systemPrompt += '\n- If the community information does not contain the answer, DO NOT RESPOND AT ALL';
+    systemPrompt += '\n- Do not say "I don\'t know" or "I can\'t help" - just don\'t respond';
+    systemPrompt += '\n- Do not make up information or guess';
+    systemPrompt += '\n- The information must be explicitly stated in the community information';
   }
+
+  systemPrompt += '\n- Keep responses under 150 words';
+  systemPrompt += '\n- Be direct and helpful';
 
   return systemPrompt;
 }
@@ -410,20 +413,48 @@ export class AIEngine {
             }
           ],
           max_tokens: config.MAX_AI_RESPONSE_TOKENS,
-          temperature: 0.3, // Lower temperature for more consistent responses
+          temperature: 0.1, // Very low temperature for consistent, deterministic responses
         });
       });
 
       let aiResponse = response.choices[0]?.message?.content?.trim();
       
-      // Only filter out very obvious "can't help" responses
+      // Filter out ANY response that indicates uncertainty or inability to help
       if (aiResponse) {
         const responseLower = aiResponse.toLowerCase();
-        // Only filter if it explicitly says it can't help or doesn't have info
-        if (responseLower.includes('i don\'t have') || 
-            responseLower.includes('i cannot') || 
-            responseLower.includes('i can\'t')) {
-          logger.debug('Filtered out "can\'t help" response', {
+        
+        // Comprehensive list of phrases that indicate the AI can't/shouldn't respond
+        const cantHelpPhrases = [
+          'i don\'t have',
+          'i cannot',
+          'i can\'t',
+          'don\'t have information',
+          'cannot provide',
+          'can\'t provide',
+          'unable to',
+          'not able to',
+          'no information',
+          'don\'t know',
+          'cannot answer',
+          'can\'t answer',
+          'not sure',
+          'unclear',
+          'contact the',
+          'ask the admin',
+          'ask an admin',
+          'check with',
+          'not specified',
+          'not mentioned',
+          'doesn\'t say',
+          'does not say',
+          'no details',
+          'not clear',
+          'not available'
+        ];
+        
+        // If response contains any "can't help" phrases, don't respond
+        if (cantHelpPhrases.some(phrase => responseLower.includes(phrase))) {
+          logger.debug('Filtered out uncertain/unhelpful response', {
             companyId,
             messagePreview: message.substring(0, 50),
             filteredResponse: aiResponse.substring(0, 100)
