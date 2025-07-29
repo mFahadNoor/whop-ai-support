@@ -1,3 +1,9 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,8 +14,23 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
-model aaaa {
-  id         BigInt   @id @default(autoincrement())
-  created_at DateTime @default(now()) @db.Timestamptz(6)
+model Company {
+  id        String   @id @db.VarChar(255) // This is the companyId from Whop
+  name      String   @db.VarChar(500)
+  config    Json?    // Store bot settings and other config here
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([createdAt])
+  @@map("companies")
+}
+
+model ExperienceMapping {
+  experienceId String   @id @db.VarChar(255) // Whop experience ID
+  companyId    String   @db.VarChar(255)     // Whop company ID
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  @@index([companyId])
+  @@map("experience_mappings")
 }
