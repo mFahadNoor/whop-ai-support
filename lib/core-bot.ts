@@ -287,16 +287,24 @@ class BotCoordinator {
     }
     
     // Multiple patterns to check for mentions
-    const patterns = [
-      // Standard @username pattern
-      new RegExp(`@${BOT_USERNAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'),
-      // Pattern without word boundary (in case of special formatting)
-      new RegExp(`@${BOT_USERNAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'),
-      // Pattern for "AI Support's agent" format
-      new RegExp(`@AI\\s+Support'?s?\\s+agent`, 'i'),
-      // Pattern for any variation of the bot name
-      new RegExp(`@(AI\\s+Support|ai-support|ai\\s+support)`, 'i'),
-    ];
+//    const patterns = [
+//      // Standard @username pattern
+//      new RegExp(`@${BOT_USERNAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i'),
+//      // Pattern without word boundary (in case of special formatting)
+//      new RegExp(`@${BOT_USERNAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'),
+//      // Pattern for "AI Support's agent" format
+//      new RegExp(`@AI\\s+Support'?s?\\s+agent`, 'i'),
+//      // Pattern for any variation of the bot name
+//      new RegExp(`@(AI\\s+Support|ai-support|ai\\s+support)`, 'i'),
+//    ];
+const patterns = [
+  new RegExp(`@${BOT_USERNAME}\\b`, 'i'),
+  new RegExp(`@${BOT_USERNAME}`, 'i'),
+  /@ai\s?chat'?s?\s?agent/i,
+  /@ai\s?support/i,
+  /@agent/i // risky but flexible
+]
+
     
     let isMatched = false;
     let matchedPattern = '';
